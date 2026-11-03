@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phòng Thi Trực Tuyến - PisQ</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- KaTeX for high-speed mathematical rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+  <!-- Header đúng theo mockup trang 2 của tài liệu -->
+  <header class="exam-header">
+    <div class="student-tag">
+      <div class="student-avatar" id="studentAvatar">A</div>
+      <div>
+        <div id="studentName">Nguyễn Văn An</div>
+        <div id="studentClass" style="font-size: 12px; color: var(--text-dim);">Lớp 12A1</div>
+      </div>
+    </div>
+
+    <!-- Section badge động ở giữa -->
+    <div id="activeSectionBadge" class="exam-section-badge">
+      PHẦN I - TRẮC NGHIỆM NHIỀU LỰA CHỌN
+    </div>
+
+    <!-- Đồng hồ đếm ngược -->
+    <div class="countdown-box" id="timerBox">
+      <i class="fa-regular fa-clock"></i>
+      <span id="timerText">45:00</span>
+    </div>
+  </header>
+
+  <!-- Main 2-Column Layout -->
+  <div class="exam-layout">
+    <!-- CỘT TRÁI: Khu vực hiển thị câu hỏi hiện tại -->
+    <div class="question-card-container">
+      <div class="question-meta-bar">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="question-num-pill" id="qBadge">Câu 1</span>
+          <span class="badge badge-gray" id="qStatusBadge">Chưa làm</span>
+        </div>
+        <div style="font-size: 13px; color: var(--text-dim);" id="qPointsBadge">
+          Điểm: 0.25đ
+        </div>
+      </div>
+
+      <!-- Nội dung câu hỏi (chứa KaTeX và ảnh) -->
+      <div class="question-content-box" id="qContent">
+        Đang tải câu hỏi...
+      </div>
+
+      <!-- Các lựa chọn trả lời -->
+      <div id="qOptionsContainer">
+        <!-- Render động theo loại phần thi g1, g2, g3, g4 -->
+      </div>
+
+      <!-- Thanh điều hướng câu trước / câu sau -->
+      <div class="question-nav-footer">
+        <button id="btnPrev" onclick="navigateQuestion(-1)" class="btn btn-outline">
+          <i class="fa-solid fa-arrow-left"></i> Câu trước
+        </button>
+        <span style="font-size: 14px; color: var(--text-dim);" id="qProgressIndicator">
+          Câu 1 / 20
+        </span>
+        <button id="btnNext" onclick="navigateQuestion(1)" class="btn btn-primary">
+          Câu sau <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- CỘT PHẢI: Sơ đồ câu hỏi (Question Matrix) -->
+    <div class="matrix-sidebar">
+      <div class="matrix-header">
+        <span>SƠ ĐỒ CÂU HỎI</span>
+        <span id="matrixCounter" class="badge badge-blue">0/20</span>
+      </div>
+
+      <!-- Container các nhóm section và nút câu hỏi -->
+      <div id="matrixSectionsContainer" style="overflow-y: auto; max-height: calc(100vh - 360px); padding-right: 4px;">
+        <!-- Đổ động các nút 1, 2, 3... theo từng phần -->
+      </div>
+
+      <!-- Nút Nộp Bài Kiểm Tra -->
+      <button onclick="promptSubmitExam()" class="btn-submit-exam">
+        <i class="fa-solid fa-paper-plane"></i> Nộp bài kiểm tra
+      </button>
+
+      <div class="matrix-footer-info">
+        <div><i class="fa-regular fa-clock"></i> Thời gian: <span id="footerDuration">45:00</span></div>
+        <div><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Đã làm: <span id="footerAnswered">0</span> câu</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL XÁC NHẬN NỘP BÀI -->
+  <div id="confirmSubmitModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-title">
+        <i class="fa-solid fa-triangle-exclamation" style="color: #f59e0b; margin-right: 8px;"></i> Xác Nhận Nộp Bài
+      </div>
+      <div class="modal-body" id="confirmModalBody">
+        Bạn có chắc chắn muốn kết thúc bài thi và nộp bài ngay bây giờ?
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeSubmitModal()" class="btn btn-outline">Làm tiếp</button>
+        <button onclick="finalizeSubmitExam()" class="btn btn-success">
+          <i class="fa-solid fa-check"></i> Xác nhận nộp bài
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KẾT QUẢ THI -->
+  <div id="resultModal" class="modal-overlay">
+    <div class="modal-dialog" style="text-align: center;">
+      <div style="width: 72px; height: 72px; border-radius: 50%; background: rgba(16, 185, 129, 0.15); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+        <i class="fa-solid fa-trophy" style="font-size: 36px; color: #10b981;"></i>
+      </div>
+      <div class="modal-title" style="font-size: 22px;">Hoàn Thành Bài Thi!</div>
+      <div class="modal-body">
+        <p style="margin-bottom: 16px; color: var(--text-muted);">Hệ thống đã tự động chấm điểm bài làm của bạn:</p>
+        <div style="font-size: 42px; font-weight: 800; color: #34d399; margin-bottom: 10px; font-family: 'JetBrains Mono', monospace;" id="resultScore">
+          10.0
+        </div>
+        <div style="font-size: 15px; color: var(--text-main);" id="resultStats">
+          Số câu đúng: <strong>18 / 20</strong> câu
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: center;">
+        <button onclick="window.location.href='/'" class="btn btn-primary btn-lg">
+          <i class="fa-solid fa-house"></i> Trở về Trang Chủ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State management
+    let examData = null;
+    let submissionId = null;
+    let questionsList = [];
+    let currentIndex = 0;
+    let studentAnswers = {}; // { question_id: { selected_option_id, text_answer, tf_answers } }
+    let timerInterval = null;
+    let remainingSeconds = 45 * 60;
+
+    // Lấy ID đề thi từ URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const examId = urlParams.get('id');
+
+    async function initExam() {
+      const userStr = localStorage.getItem('pisq_user');
+      if (!userStr) {
+        alert('Vui lòng đăng nhập để làm bài!');
+        window.location.href = '/';
+        return;
+      }
+      const user = JSON.parse(userStr);
+      document.getElementById('studentName').textContent = user.full_name;
+      document.getElementById('studentClass').textContent = user.class_name ? `Lớp ${user.class_name}` : 'Học sinh';
+      document.getElementById('studentAvatar').textContent = user.full_name.charAt(0).toUpperCase();
+
+      if (!examId) {
+        alert('Không tìm thấy mã bài thi!');
+        window.location.href = '/';
+        return;
+      }
+
+      // Gửi yêu cầu bắt đầu hoặc khôi phục bài thi
+      const formData = new FormData();
+      formData.append('student_id', user.id);
+
+      try {
+        const res = await fetch(`/api/student/exams/${examId}/start`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+
+        if (data.status === 'already_submitted') {
+          alert(`Bạn đã nộp bài thi này rồi! Điểm số: ${data.score}`);
+          window.location.href = '/';
+          return;
+        }
+
+        if (!res.ok) {
+          alert(data.detail || 'Không thể tải đề thi!');
+          window.location.href = '/';
+          return;
+        }
+
+        examData = data;
+        submissionId = data.submission_id;
+
+        // Flatten questions list để dễ dàng duyệt tiến / lùi
+        questionsList = [];
+        data.shuffled_exam.forEach(sec => {
+          sec.questions.forEach(q => {
+            questionsList.push({
+              ...q,
+              section_id: sec.id,
+              section_type: sec.section_type,
+              section_title: sec.title
+            });
+          });
+        });
+
+        // Khôi phục các câu trả lời đã lưu nếu đang làm dở
+        if (data.saved_answers) {
+          data.saved_answers.forEach(ans => {
+            let tf = null;
+            if (ans.text_answer && ans.text_answer.startsWith('{')) {
+              try { tf = JSON.parse(ans.text_answer); } catch(e){}
+            }
+            studentAnswers[ans.question_id] = {
+              selected_option_id: ans.selected_option_id,
+              text_answer: ans.text_answer,
+              tf_answers: tf
+            };
+          });
+        }
+
+        // Tính thời gian còn lại
+        const startTime = new Date(data.start_time).getTime();
+        const durationMs = data.duration_minutes * 60 * 1000;
+        const now = new Date().getTime();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        remainingSeconds = Math.max(0, (data.duration_minutes * 60) - elapsedSeconds);
+
+        document.getElementById('footerDuration').textContent = `${data.duration_minutes}:00`;
+
+        buildMatrix();
+        renderCurrentQuestion();
+        startTimer();
+      } catch (err) {
+        alert('Lỗi khởi tạo bài thi: ' + err.message);
+      }
+    }
+
+    function startTimer() {
+      updateTimerDisplay();
+      timerInterval = setInterval(() => {
+        remainingSeconds--;
+        updateTimerDisplay();
+        if (remainingSeconds <= 0) {
+          clearInterval(timerInterval);
+          alert('Hết giờ làm bài! Hệ thống đang tự động nộp bài của bạn.');
+          finalizeSubmitExam();
+        }
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      const str = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const timerText = document.getElementById('timerText');
+      const timerBox = document.getElementById('timerBox');
+
+      timerText.textContent = str;
+      if (remainingSeconds < 300) { // Dưới 5 phút
+        timerBox.classList.add('warning');
+      }
+    }
+
+    function buildMatrix() {
+      const container = document.getElementById('matrixSectionsContainer');
+      container.innerHTML = '';
+
+      let globalQIndex = 0;
+      examData.shuffled_exam.forEach((sec, sIdx) => {
+        const secDiv = document.createElement('div');
+        secDiv.innerHTML = `<div class="matrix-sec-title">${sec.title}</div>`;
+
+        const grid = document.createElement('div');
+        grid.className = 'matrix-grid';
+
+        sec.questions.forEach((q) => {
+          const btn = document.createElement('button');
+          const qIdx = globalQIndex;
+          btn.className = 'matrix-btn';
+          btn.id = `matrix-btn-${q.id}`;
+          btn.textContent = q.number;
+          btn.onclick = () => jumpToQuestion(qIdx);
+
+          if (studentAnswers[q.id] && isAnswerProvided(studentAnswers[q.id], sec.section_type)) {
+            btn.classList.add('answered');
+          }
+
+          grid.appendChild(btn);
+          globalQIndex++;
+        });
+
+        secDiv.appendChild(grid);
+        container.appendChild(secDiv);
+      });
+
+      updateMatrixStats();
+    }
+
+    function isAnswerProvided(ans, secType) {
+      if (!ans) return false;
+      if (secType === 'g1' && ans.selected_option_id) return true;
+      if (secType === 'g2' && ans.tf_answers && Object.keys(ans.tf_answers).length > 0) return true;
+      if ((secType === 'g3' || secType === 'g4') && ans.text_answer && ans.text_answer.trim().length > 0) return true;
+      return false;
+    }
+
+    function updateMatrixStats() {
+      let answeredCount = 0;
+      questionsList.forEach(q => {
+        const btn = document.getElementById(`matrix-btn-${q.id}`);
+        const answered = isAnswerProvided(studentAnswers[q.id], q.section_type);
+        if (btn) {
+          btn.classList.toggle('answered', answered);
+          btn.classList.toggle('current', questionsList[currentIndex].id === q.id);
+        }
+        if (answered) answeredCount++;
+      });
+
+      document.getElementById('matrixCounter').textContent = `${answeredCount}/${questionsList.length}`;
+      document.getElementById('footerAnswered').textContent = answeredCount;
+    }
+
+    function renderCurrentQuestion() {
+      const q = questionsList[currentIndex];
+      if (!q) return;
+
+      // Cập nhật Section Badge trên header
+      document.getElementById('activeSectionBadge').textContent = `<#${q.section_type}> ${q.section_title}`;
+
+      // Cập nhật thông tin câu
+      document.getElementById('qBadge').textContent = `Câu ${q.number}`;
+      document.getElementById('qPointsBadge').textContent = `Điểm: ${q.points.toFixed(2)}đ`;
+      document.getElementById('qProgressIndicator').textContent = `Câu ${currentIndex + 1} / ${questionsList.length}`;
+
+      const answered = isAnswerProvided(studentAnswers[q.id], q.section_type);
+      const statusBadge = document.getElementById('qStatusBadge');
+      statusBadge.textContent = answered ? 'Đã làm' : 'Chưa làm';
+      statusBadge.className = `badge ${answered ? 'badge-green' : 'badge-gray'}`;
+
+      // Render nội dung câu hỏi
+      const contentEl = document.getElementById('qContent');
+      contentEl.innerHTML = q.content;
+
+      // Render các lựa chọn theo loại section
+      const optContainer = document.getElementById('qOptionsContainer');
+      optContainer.innerHTML = '';
+
+      const currentAns = studentAnswers[q.id] || {};
+
+      // 1. Phần I: Trắc nghiệm 1 đáp án (g1)
+      if (q.section_type === 'g1') {
+        const optList = document.createElement('div');
+        optList.className = 'options-list';
+
+        q.options.forEach(opt => {
+          const isSelected = currentAns.selected_option_id === opt.id;
+          const card = document.createElement('div');
+          card.className = `option-card ${isSelected ? 'selected' : ''}`;
+          card.innerHTML = `
+            <div class="option-letter">${opt.label}</div>
+            <div class="option-text">${opt.content}</div>
+          `;
+          card.onclick = () => selectSingleChoice(q.id, opt.id);
+          optList.appendChild(card);
+        });
+        optContainer.appendChild(optList);
+      }
+
+      // 2. Phần II: Trắc nghiệm Đúng / Sai (g2)
+      else if (q.section_type === 'g2') {
+        const table = document.createElement('table');
+        table.className = 'tf-table';
+        const tfMap = currentAns.tf_answers || {};
+
+        q.options.forEach(opt => {
+          const row = document.createElement('tr');
+          row.className = 'tf-row';
+          const choice = tfMap[String(opt.id)]; // 'true' hoặc 'false'
+
+          row.innerHTML = `
+            <td><strong>${opt.label})</strong> ${opt.content}</td>
+            <td>
+              <div class="tf-btn-group">
+                <button type="button" class="tf-btn ${choice === 'true' ? 'active-true' : ''}" onclick="selectTrueFalse(${q.id}, ${opt.id}, 'true')">
+                  <i class="fa-solid fa-check"></i> Đúng
+                </button>
+                <button type="button" class="tf-btn ${choice === 'false' ? 'active-false' : ''}" onclick="selectTrueFalse(${q.id}, ${opt.id}, 'false')">
+                  <i class="fa-solid fa-xmark"></i> Sai
+                </button>
+              </div>
+            </td>
+          `;
+          table.appendChild(row);
+        });
+        optContainer.appendChild(table);
+      }
+
+      // 3. Phần III: Trả lời ngắn (g3)
+      else if (q.section_type === 'g3') {
+        const div = document.createElement('div');
+        div.style.marginBottom = '24px';
+        div.innerHTML = `
+          <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
+            HỌC SINH NHẬP ĐÁP ÁN NGẮN VÀO Ô DƯỚI ĐÂY:
+          </label>
+          <input type="text" class="short-answer-input" id="shortAnsInput" 
+                 value="${currentAns.text_answer || ''}" 
+                 placeholder="Gõ đáp án của bạn..." 
+                 oninput="handleShortAnswerInput(${q.id}, this.value)">
+        `;
+        optContainer.appendChild(div);
+      }
+
+      // 4. Phần IV: Tự luận (g4)
+      else if (q.section_type === 'g4') {
+        const div = document.createElement('div');
+        div.style.marginBottom = '24px';
+        div.innerHTML = `
+          <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
+            BÀI LÀM TỰ LUẬN / BÀI NGHE CỦA HỌC SINH:
+          </label>
+          <textarea class="form-control" style="min-height: 160px; font-size: 15px;" 
+                    placeholder="Nhập nội dung bài làm tự luận của bạn tại đây..." 
+                    oninput="handleShortAnswerInput(${q.id}, this.value)">${currentAns.text_answer || ''}</textarea>
+        `;
+        optContainer.appendChild(div);
+      }
+
+      // Render KaTeX nếu có công thức toán học
+      renderKaTeX();
+
+      // Cập nhật trạng thái các nút Trước / Sau
+      document.getElementById('btnPrev').disabled = (currentIndex === 0);
+      document.getElementById('btnNext').disabled = (currentIndex === questionsList.length - 1);
+
+      updateMatrixStats();
+    }
+
+    function renderKaTeX() {
+      if (window.renderMathInElement) {
+        renderMathInElement(document.getElementById('qContent'), {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ],
+          throwOnError: false
+        });
+        renderMathInElement(document.getElementById('qOptionsContainer'), {
+          delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+          ],
+          throwOnError: false
+        });
+      }
+    }
+
+    function jumpToQuestion(index) {
+      if (index >= 0 && index < questionsList.length) {
+        currentIndex = index;
+        renderCurrentQuestion();
+      }
+    }
+
+    function navigateQuestion(offset) {
+      jumpToQuestion(currentIndex + offset);
+    }
+
+    // Chọn đáp án trắc nghiệm g1
+    async function selectSingleChoice(questionId, optionId) {
+      studentAnswers[questionId] = {
+        selected_option_id: optionId,
+        text_answer: null,
+        tf_answers: null
+      };
+      renderCurrentQuestion();
+
+      // Tự động lưu ngầm lên server
+      await autoSaveAnswer(questionId, optionId, null, null);
+    }
+
+    // Chọn Đúng/Sai g2
+    async function selectTrueFalse(questionId, optionId, value) {
+      if (!studentAnswers[questionId]) {
+        studentAnswers[questionId] = { selected_option_id: null, text_answer: null, tf_answers: {} };
+      }
+      if (!studentAnswers[questionId].tf_answers) {
+        studentAnswers[questionId].tf_answers = {};
+      }
+
+      studentAnswers[questionId].tf_answers[String(optionId)] = value;
+      renderCurrentQuestion();
+
+      await autoSaveAnswer(questionId, null, null, studentAnswers[questionId].tf_answers);
+    }
+
+    // Nhập câu trả lời ngắn g3 / g4
+    let inputTimeout = null;
+    function handleShortAnswerInput(questionId, value) {
+      if (!studentAnswers[questionId]) {
+        studentAnswers[questionId] = { selected_option_id: null, text_answer: value, tf_answers: null };
+      } else {
+        studentAnswers[questionId].text_answer = value;
+      }
+      updateMatrixStats();
+
+      clearTimeout(inputTimeout);
+      inputTimeout = setTimeout(() => {
+        autoSaveAnswer(questionId, null, value, null);
+      }, 500);
+    }
+
+    async function autoSaveAnswer(questionId, selectedOptionId, textAnswer, tfAnswers) {
+      try {
+        await fetch(`/api/student/submissions/${submissionId}/save-answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question_id: questionId,
+            selected_option_id: selectedOptionId,
+            text_answer: textAnswer,
+            tf_answers: tfAnswers
+          })
+        });
+      } catch (err) {
+        console.warn('Lỗi lưu ngầm câu trả lời:', err);
+      }
+    }
+
+    // Xử lý nộp bài
+    function promptSubmitExam() {
+      let answeredCount = 0;
+      questionsList.forEach(q => {
+        if (isAnswerProvided(studentAnswers[q.id], q.section_type)) answeredCount++;
+      });
+      const unanswered = questionsList.length - answeredCount;
+
+      let msg = `<p>Bạn đã hoàn thành <strong>${answeredCount}/${questionsList.length}</strong> câu hỏi.</p>`;
+      if (unanswered > 0) {
+        msg += `<p style="margin-top: 10px; color: #f87171;"><i class="fa-solid fa-triangle-exclamation"></i> <strong>Lưu ý:</strong> Bạn vẫn còn <strong>${unanswered}</strong> câu chưa trả lời. Bạn có muốn nộp bài luôn không?</p>`;
+      } else {
+        msg += `<p style="margin-top: 10px; color: #34d399;"><i class="fa-solid fa-circle-check"></i> Bạn đã trả lời tất cả các câu hỏi!</p>`;
+      }
+
+      document.getElementById('confirmModalBody').innerHTML = msg;
+      document.getElementById('confirmSubmitModal').classList.add('active');
+    }
+
+    function closeSubmitModal() {
+      document.getElementById('confirmSubmitModal').classList.remove('active');
+    }
+
+    async function finalizeSubmitExam() {
+      closeSubmitModal();
+      clearInterval(timerInterval);
+
+      try {
+        const res = await fetch(`/api/student/submissions/${submissionId}/submit`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi khi nộp bài: ' + (data.detail || 'Không xác định'));
+          return;
+        }
+
+        document.getElementById('resultScore').textContent = `${data.score} đ`;
+        document.getElementById('resultStats').innerHTML = `Số câu đạt chuẩn: <strong>${data.correct_questions} / ${data.total_questions}</strong> câu`;
+        document.getElementById('resultModal').classList.add('active');
+      } catch (err) {
+        alert('Lỗi nộp bài: ' + err.message);
+      }
+    }
+
+    window.onload = initExam;
+  </script>
+</body>
+</html>

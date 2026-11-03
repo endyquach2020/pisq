@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trang Quản Trị Khảo Thí - PisQ</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="admin-navbar">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <i class="fa-solid fa-graduation-cap" style="font-size: 26px; color: #38bdf8;"></i>
+      <div>
+        <h1 style="font-size: 18px; font-weight: 700; color: #fff;">PisQ ADMIN PORTAL</h1>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Quản lý khảo thí chuẩn GDPT 2018</div>
+      </div>
+    </div>
+
+    <!-- Tab navigation -->
+    <div class="admin-nav-links">
+      <button class="nav-tab-btn active" id="btnTabExams" onclick="switchAdminTab('exams')">
+        <i class="fa-solid fa-file-lines"></i> Quản lý Đề Thi
+      </button>
+      <button class="nav-tab-btn" id="btnTabStudents" onclick="switchAdminTab('students')">
+        <i class="fa-solid fa-users"></i> Lớp Học & Học Sinh
+      </button>
+      <button class="nav-tab-btn" id="btnTabScores" onclick="switchAdminTab('scores')">
+        <i class="fa-solid fa-chart-column"></i> Bảng Điểm & Thống Kê
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <span class="badge badge-amber"><i class="fa-solid fa-user-shield"></i> <span id="adminName">Admin</span></span>
+      <a href="/" class="btn btn-outline btn-sm"><i class="fa-solid fa-eye"></i> Xem Trang Học Sinh</a>
+      <button onclick="handleLogout()" class="btn btn-danger btn-sm"><i class="fa-solid fa-arrow-right-from-bracket"></i> Đăng xuất</button>
+    </div>
+  </header>
+
+  <div class="admin-container">
+    <!-- ==================== TAB 1: QUẢN LÝ ĐỀ THI ==================== -->
+    <div id="tabContentExams">
+      <!-- Upload Box -->
+      <div class="card-box">
+        <div class="card-header-bar">
+          <h2 style="font-size: 18px; font-weight: 700; color: #fff;">
+            <i class="fa-solid fa-cloud-arrow-up" style="color: #38bdf8; margin-right: 8px;"></i> Nạp Đề Thi Từ File Word (.docx)
+          </h2>
+          <span style="font-size: 13px; color: var(--text-dim);">Hỗ trợ công thức LaTeX / OMML & ảnh nhúng inline</span>
+        </div>
+
+        <form id="uploadDocxForm" onsubmit="handleUploadDocx(event)" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 16px; align-items: flex-end;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Tiêu đề bài kiểm tra</label>
+            <input type="text" id="examTitleInput" class="form-control" placeholder="Ví dụ: Kiểm tra giữa kỳ 1 Toán 12" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Thời gian (Phút)</label>
+            <input type="number" id="examDurationInput" class="form-control" value="45" min="5" max="180" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Chọn file Word (.docx)</label>
+            <input type="file" id="examFileInput" class="form-control" accept=".docx" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="btnUploadDocx" style="height: 44px;">
+            <i class="fa-solid fa-upload"></i> Nạp đề thi
+          </button>
+        </form>
+
+        <div style="margin-top: 14px; font-size: 13px; color: var(--text-dim); display: flex; gap: 20px;">
+          <span><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Tự động phân chia 4 phần: <code>&lt;#g1&gt;</code>, <code>&lt;#g2&gt;</code>, <code>&lt;#g3&gt;</code>, <code>&lt;#g4&gt;</code></span>
+          <span><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Nhận diện gạch chân (underline) đáp án đúng</span>
+        </div>
+      </div>
+
+      <!-- Danh sách đề thi -->
+      <div class="card-box">
+        <div class="card-header-bar">
+          <h2 style="font-size: 18px; font-weight: 700; color: #fff;">
+            <i class="fa-solid fa-list-check" style="color: #10b981; margin-right: 8px;"></i> Danh Sách Bài Thi Hiện Có
+          </h2>
+          <button onclick="loadAdminExams()" class="btn btn-outline btn-sm"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 60px;">Mã</th>
+              <th>Tiêu đề bài thi</th>
+              <th>Thời lượng</th>
+              <th>Số phần / Câu</th>
+              <th>Thang điểm</th>
+              <th>Lượt làm</th>
+              <th>Trạng thái</th>
+              <th style="text-align: right;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="examTableBody">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Đang tải danh sách bài thi...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 2: LỚP HỌC & HỌC SINH ==================== -->
+    <div id="tabContentStudents" style="display: none;">
+      <div style="display: grid; grid-template-columns: 340px 1fr; gap: 24px;">
+        <!-- Cột trái: Quản lý lớp học -->
+        <div>
+          <div class="card-box">
+            <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 16px;">
+              <i class="fa-solid fa-school" style="color: #38bdf8; margin-right: 6px;"></i> Thêm Lớp Học
+            </h3>
+            <form onsubmit="handleCreateClass(event)">
+              <div class="form-group">
+                <label class="form-label">Tên lớp</label>
+                <input type="text" id="classNameInput" class="form-control" placeholder="Ví dụ: 12A1, 10C2" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Khối lớp</label>
+                <select id="classGradeInput" class="form-control" required>
+                  <option value="12">Khối 12</option>
+                  <option value="11">Khối 11</option>
+                  <option value="10">Khối 10</option>
+                  <option value="9">Khối 9</option>
+                  <option value="8">Khối 8</option>
+                  <option value="7">Khối 7</option>
+                  <option value="6">Khối 6</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <i class="fa-solid fa-plus"></i> Tạo lớp học
+              </button>
+            </form>
+          </div>
+
+          <div class="card-box">
+            <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 14px;">Danh Sách Lớp</h3>
+            <div id="classListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Danh sách lớp -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Cột phải: Quản lý học sinh -->
+        <div>
+          <div class="card-box">
+            <div class="card-header-bar">
+              <div>
+                <h3 style="font-size: 16px; font-weight: 700; color: #fff;">
+                  <i class="fa-solid fa-user-group" style="color: #10b981; margin-right: 6px;"></i> Quản Lý Học Sinh
+                </h3>
+                <span id="selectedClassLabel" style="font-size: 13px; color: var(--text-dim);">Chọn lớp để xem danh sách</span>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button onclick="openImportExcelModal()" class="btn btn-success btn-sm">
+                  <i class="fa-solid fa-file-excel"></i> Nhập từ Excel (.xlsx)
+                </button>
+                <button onclick="openAddStudentModal()" class="btn btn-primary btn-sm">
+                  <i class="fa-solid fa-user-plus"></i> Thêm thủ công
+                </button>
+              </div>
+            </div>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px;">ID</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ và tên</th>
+                  <th>Lớp</th>
+                  <th>Giới tính</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="studentTableBody">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Vui lòng chọn lớp học...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 3: BẢNG ĐIỂM & THỐNG KÊ ==================== -->
+    <div id="tabContentScores" style="display: none;">
+      <div class="card-box">
+        <div class="card-header-bar">
+          <div style="display: flex; align-items: center; gap: 20px;">
+            <h2 style="font-size: 18px; font-weight: 700; color: #fff;">
+              <i class="fa-solid fa-chart-line" style="color: #38bdf8; margin-right: 8px;"></i> Bảng Điểm Khảo Thí
+            </h2>
+            <div style="display: flex; gap: 12px;">
+              <select id="scoreExamFilter" class="form-control" style="width: 280px;" onchange="loadSubmissions()">
+                <option value="">-- Chọn bài thi --</option>
+              </select>
+              <select id="scoreClassFilter" class="form-control" style="width: 180px;" onchange="loadSubmissions()">
+                <option value="">-- Tất cả các lớp --</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="loadSubmissions()" class="btn btn-outline btn-sm"><i class="fa-solid fa-rotate-right"></i> Tải lại</button>
+        </div>
+
+        <!-- Thống kê nhanh -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+          <div style="background: #162035; padding: 18px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <div style="font-size: 13px; color: var(--text-dim);">Số lượt thi</div>
+            <div style="font-size: 24px; font-weight: 700; color: #38bdf8;" id="statTotalSubs">0</div>
+          </div>
+          <div style="background: #162035; padding: 18px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <div style="font-size: 13px; color: var(--text-dim);">Điểm trung bình</div>
+            <div style="font-size: 24px; font-weight: 700; color: #f59e0b;" id="statAvgScore">0.0</div>
+          </div>
+          <div style="background: #162035; padding: 18px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <div style="font-size: 13px; color: var(--text-dim);">Điểm cao nhất</div>
+            <div style="font-size: 24px; font-weight: 700; color: #10b981;" id="statMaxScore">0.0</div>
+          </div>
+          <div style="background: #162035; padding: 18px; border-radius: 10px; border: 1px solid var(--border-color);">
+            <div style="font-size: 13px; color: var(--text-dim);">Tỷ lệ đạt (>= 5đ)</div>
+            <div style="font-size: 24px; font-weight: 700; color: #a855f7;" id="statPassRate">0%</div>
+          </div>
+        </div>
+
+        <!-- Danh sách bài nộp -->
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 60px;">Hạng</th>
+              <th>Họ và tên</th>
+              <th>Tên đăng nhập</th>
+              <th>Lớp</th>
+              <th>Điểm số</th>
+              <th>Thời gian nộp</th>
+              <th>Trạng thái</th>
+              <th style="text-align: right;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="submissionTableBody">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Chọn bài thi để xem kết quả...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CẤU HÌNH & CHIA ĐIỂM ĐỀ THI -->
+  <div id="configExamModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-title">
+        <i class="fa-solid fa-sliders" style="color: #38bdf8; margin-right: 8px;"></i> Cấu Hình & Chia Điểm Đề Thi
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="cfgExamId">
+        <div class="form-group">
+          <label class="form-label">Tên bài thi</label>
+          <input type="text" id="cfgExamTitle" class="form-control" required>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Thời gian (Phút)</label>
+            <input type="number" id="cfgDuration" class="form-control" min="5" max="180">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tổng điểm</label>
+            <input type="number" id="cfgTotalScore" class="form-control" step="0.5" value="10.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Trạng thái thi</label>
+            <select id="cfgIsPublished" class="form-control">
+              <option value="1">Mở cho học sinh làm</option>
+              <option value="0">Tạm ẩn (Đóng đề)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <label class="form-label"><i class="fa-solid fa-divide"></i> Phân chia điểm cho từng phần (GDPT 2018):</label>
+          <div id="cfgSectionsContainer" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Sections inputs -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeConfigModal()" class="btn btn-outline">Hủy</button>
+        <button onclick="saveExamConfig()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu cấu hình</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL IMPORT EXCEL HỌC SINH -->
+  <div id="importExcelModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-title">
+        <i class="fa-solid fa-file-excel" style="color: #10b981; margin-right: 8px;"></i> Nhập Học Sinh Từ File Excel
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px; font-size: 13px; color: #93c5fd; margin-bottom: 16px;">
+          <strong>Định dạng file Excel (.xlsx):</strong><br/>
+          - Dòng 1: Tiêu đề cột (bỏ qua)<br/>
+          - Cột 1: Tên đăng nhập | Cột 2: Họ tên | Cột 3: Mật khẩu | Cột 4: Giới tính
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chọn lớp áp dụng</label>
+          <select id="importClassSelect" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chọn file Excel (.xlsx)</label>
+          <input type="file" id="excelFileInput" class="form-control" accept=".xlsx, .xls" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeImportExcelModal()" class="btn btn-outline">Hủy</button>
+        <button onclick="submitImportExcel()" class="btn btn-success" id="btnSubmitExcel">
+          <i class="fa-solid fa-cloud-arrow-up"></i> Bắt đầu nạp dữ liệu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL THÊM HỌC SINH THỦ CÔNG -->
+  <div id="addStudentModal" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-title">
+        <i class="fa-solid fa-user-plus" style="color: #38bdf8; margin-right: 8px;"></i> Thêm Học Sinh Thủ Công
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Lớp học</label>
+          <select id="manualStudentClassSelect" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tên đăng nhập</label>
+          <input type="text" id="manualUsername" class="form-control" placeholder="Ví dụ: nguyenvanb" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Họ và tên học sinh</label>
+          <input type="text" id="manualFullName" class="form-control" placeholder="Ví dụ: Nguyễn Văn B" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mật khẩu</label>
+          <input type="password" id="manualPassword" class="form-control" value="123456" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Giới tính</label>
+          <select id="manualGender" class="form-control">
+            <option value="male">Nam</option>
+            <option value="female">Nữ</option>
+            <option value="other">Khác</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeAddStudentModal()" class="btn btn-outline">Hủy</button>
+        <button onclick="submitManualStudent()" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Thêm học sinh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CHI TIẾT BÀI LÀM HỌC SINH -->
+  <div id="submissionDetailModal" class="modal-overlay">
+    <div class="modal-dialog" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span><i class="fa-solid fa-file-lines" style="color: #38bdf8; margin-right: 8px;"></i> Chi Tiết Bài Làm</span>
+        <button onclick="closeDetailModal()" class="btn btn-outline btn-sm"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="submissionDetailBody">
+        Đang tải bài làm...
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let activeClassId = null;
+    let classesCache = [];
+    let currentExamDetail = null;
+
+    function checkAdminAuth() {
+      const userStr = localStorage.getItem('pisq_user');
+      if (!userStr) {
+        alert('Vui lòng đăng nhập!');
+        window.location.href = '/';
+        return;
+      }
+      const user = JSON.parse(userStr);
+      if (user.role !== 'admin' && user.role !== 'teacher') {
+        alert('Tài khoản không có quyền truy cập trang quản trị!');
+        window.location.href = '/';
+        return;
+      }
+      document.getElementById('adminName').textContent = user.full_name;
+    }
+
+    function switchAdminTab(tab) {
+      document.getElementById('btnTabExams').classList.toggle('active', tab === 'exams');
+      document.getElementById('btnTabStudents').classList.toggle('active', tab === 'students');
+      document.getElementById('btnTabScores').classList.toggle('active', tab === 'scores');
+
+      document.getElementById('tabContentExams').style.display = tab === 'exams' ? 'block' : 'none';
+      document.getElementById('tabContentStudents').style.display = tab === 'students' ? 'block' : 'none';
+      document.getElementById('tabContentScores').style.display = tab === 'scores' ? 'block' : 'none';
+
+      if (tab === 'exams') loadAdminExams();
+      if (tab === 'students') loadClassesAndStudents();
+      if (tab === 'scores') loadScoreboardMeta();
+    }
+
+    // ==================== QUẢN LÝ ĐỀ THI ====================
+    async function loadAdminExams() {
+      const tbody = document.getElementById('examTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Đang tải...</td></tr>';
+      try {
+        const res = await fetch('/api/admin/exams');
+        const data = await res.json();
+        if (data.exams && data.exams.length > 0) {
+          tbody.innerHTML = data.exams.map(exam => `
+            <tr>
+              <td><strong>#${exam.id}</strong></td>
+              <td><strong style="color: #fff;">${exam.title}</strong></td>
+              <td>${exam.duration_minutes} phút</td>
+              <td>${exam.section_count} phần (${exam.question_count} câu)</td>
+              <td><strong>${parseFloat(exam.total_score).toFixed(1)}đ</strong></td>
+              <td><span class="badge badge-blue">${exam.submission_count} bài</span></td>
+              <td>
+                <span class="badge ${exam.is_published ? 'badge-green' : 'badge-gray'}">
+                  ${exam.is_published ? 'Đang mở' : 'Đã ẩn'}
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <button onclick="openConfigModal(${exam.id})" class="btn btn-outline btn-sm" title="Cấu hình / Chia điểm">
+                  <i class="fa-solid fa-sliders"></i>
+                </button>
+                <button onclick="viewExamSubmissions(${exam.id})" class="btn btn-outline btn-sm" title="Xem bảng điểm">
+                  <i class="fa-solid fa-chart-column"></i>
+                </button>
+                <button onclick="deleteExam(${exam.id})" class="btn btn-danger btn-sm" title="Xóa đề">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Chưa có đề thi nào. Hãy nạp file Word ở trên!</td></tr>';
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="color: #ef4444;">Lỗi tải đề thi: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function handleUploadDocx(e) {
+      e.preventDefault();
+      const title = document.getElementById('examTitleInput').value.trim();
+      const duration = document.getElementById('examDurationInput').value;
+      const fileInput = document.getElementById('examFileInput');
+      const btn = document.getElementById('btnUploadDocx');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Vui lòng chọn file Word .docx!');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('duration_minutes', duration);
+      formData.append('total_score', 10.0);
+      formData.append('is_published', 1);
+      formData.append('file', fileInput.files[0]);
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang phân tích...';
+
+      try {
+        const res = await fetch('/api/admin/exams/import-docx', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi nạp đề thi: ' + (data.detail || 'Không xác định'));
+        } else {
+          alert(data.message);
+          document.getElementById('uploadDocxForm').reset();
+          loadAdminExams();
+        }
+      } catch (err) {
+        alert('Lỗi kết nối máy chủ: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-upload"></i> Nạp đề thi';
+      }
+    }
+
+    async function deleteExam(examId) {
+      if (!confirm('Bạn có chắc chắn muốn xóa bài thi này và toàn bộ dữ liệu kết quả liên quan?')) return;
+      try {
+        const res = await fetch(`/api/admin/exams/${examId}`, { method: 'DELETE' });
+        const data = await res.json();
+        alert(data.message);
+        loadAdminExams();
+      } catch (err) {
+        alert('Lỗi xóa đề: ' + err.message);
+      }
+    }
+
+    // Modal cấu hình & chia điểm
+    async function openConfigModal(examId) {
+      try {
+        const res = await fetch(`/api/admin/exams/${examId}`);
+        const data = await res.json();
+        if (!res.ok) return alert('Lỗi tải thông tin đề thi');
+
+        const exam = data.exam;
+        currentExamDetail = exam;
+
+        document.getElementById('cfgExamId').value = exam.id;
+        document.getElementById('cfgExamTitle').value = exam.title;
+        document.getElementById('cfgDuration').value = exam.duration_minutes;
+        document.getElementById('cfgTotalScore').value = exam.total_score;
+        document.getElementById('cfgIsPublished').value = exam.is_published;
+
+        const secContainer = document.getElementById('cfgSectionsContainer');
+        secContainer.innerHTML = exam.sections.map(sec => `
+          <div style="background: #162035; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <span class="badge badge-blue">&lt;#${sec.section_type}&gt;</span>
+              <strong style="margin-left: 8px; font-size: 14px;">${sec.title}</strong>
+              <span style="font-size: 12px; color: var(--text-dim); margin-left: 6px;">(${sec.questions ? sec.questions.length : 0} câu)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label style="font-size: 12px; color: var(--text-dim);">Điểm phần:</label>
+              <input type="number" step="0.25" class="form-control cfg-sec-pts" data-sec-id="${sec.id}" value="${sec.points}" style="width: 90px; text-align: center;">
+            </div>
+          </div>
+        `).join('');
+
+        document.getElementById('configExamModal').classList.add('active');
+      } catch (err) {
+        alert('Lỗi mở cấu hình: ' + err.message);
+      }
+    }
+
+    function closeConfigModal() {
+      document.getElementById('configExamModal').classList.remove('active');
+    }
+
+    async function saveExamConfig() {
+      const examId = document.getElementById('cfgExamId').value;
+      const title = document.getElementById('cfgExamTitle').value.trim();
+      const duration = parseInt(document.getElementById('cfgDuration').value);
+      const totalScore = parseFloat(document.getElementById('cfgTotalScore').value);
+      const isPublished = parseInt(document.getElementById('cfgIsPublished').value);
+
+      const secInputs = document.querySelectorAll('.cfg-sec-pts');
+      const sections = [];
+      secInputs.forEach(inp => {
+        sections.push({
+          id: parseInt(inp.dataset.secId),
+          points: parseFloat(inp.value)
+        });
+      });
+
+      try {
+        const res = await fetch(`/api/admin/exams/${examId}/config`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            duration_minutes: duration,
+            total_score: totalScore,
+            is_published: isPublished,
+            sections
+          })
+        });
+        const data = await res.json();
+        alert(data.message);
+        closeConfigModal();
+        loadAdminExams();
+      } catch (err) {
+        alert('Lỗi lưu cấu hình: ' + err.message);
+      }
+    }
+
+    // ==================== QUẢN LÝ LỚP HỌC & HỌC SINH ====================
+    async function loadClassesAndStudents() {
+      try {
+        const res = await fetch('/api/admin/classes');
+        const data = await res.json();
+        classesCache = data.classes || [];
+
+        // Đổ danh sách lớp
+        const container = document.getElementById('classListContainer');
+        const importSelect = document.getElementById('importClassSelect');
+        const manualSelect = document.getElementById('manualStudentClassSelect');
+        const scoreClassFilter = document.getElementById('scoreClassFilter');
+
+        importSelect.innerHTML = '';
+        manualSelect.innerHTML = '';
+        scoreClassFilter.innerHTML = '<option value="">-- Tất cả các lớp --</option>';
+
+        if (classesCache.length > 0) {
+          container.innerHTML = classesCache.map(c => `
+            <div onclick="selectClass(${c.id}, '${c.name}')" 
+                 id="class-item-${c.id}"
+                 style="background: ${activeClassId === c.id ? '#1e293b' : '#162035'}; border: 1px solid ${activeClassId === c.id ? '#38bdf8' : 'var(--border-color)'}; padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;">
+              <div>
+                <strong style="color: #fff;">Lớp ${c.name}</strong>
+                <div style="font-size: 12px; color: var(--text-dim);">Khối ${c.grade_level} (${c.school_year})</div>
+              </div>
+              <span class="badge badge-blue">${c.student_count} HS</span>
+            </div>
+          `).join('');
+
+          classesCache.forEach(c => {
+            const opt1 = new Option(`Lớp ${c.name} (Khối ${c.grade_level})`, c.id);
+            const opt2 = new Option(`Lớp ${c.name} (Khối ${c.grade_level})`, c.id);
+            const opt3 = new Option(`Lớp ${c.name}`, c.id);
+            importSelect.add(opt1);
+            manualSelect.add(opt2);
+            scoreClassFilter.add(opt3);
+          });
+
+          if (!activeClassId && classesCache.length > 0) {
+            selectClass(classesCache[0].id, classesCache[0].name);
+          } else if (activeClassId) {
+            loadStudentsByClass(activeClassId);
+          }
+        } else {
+          container.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">Chưa có lớp học nào.</div>';
+        }
+      } catch (err) {
+        console.error('Lỗi tải danh sách lớp:', err);
+      }
+    }
+
+    function selectClass(classId, className) {
+      activeClassId = classId;
+      document.querySelectorAll('#classListContainer > div').forEach(el => {
+        el.style.borderColor = 'var(--border-color)';
+        el.style.background = '#162035';
+      });
+      const activeEl = document.getElementById(`class-item-${classId}`);
+      if (activeEl) {
+        activeEl.style.borderColor = '#38bdf8';
+        activeEl.style.background = '#1e293b';
+      }
+      document.getElementById('selectedClassLabel').textContent = `Đang xem danh sách: Lớp ${className}`;
+      loadStudentsByClass(classId);
+    }
+
+    async function loadStudentsByClass(classId) {
+      const tbody = document.getElementById('studentTableBody');
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Đang tải học sinh...</td></tr>';
+      try {
+        const res = await fetch(`/api/admin/students?class_id=${classId}`);
+        const data = await res.json();
+        if (data.students && data.students.length > 0) {
+          tbody.innerHTML = data.students.map(s => `
+            <tr>
+              <td><strong>#${s.id}</strong></td>
+              <td><code>${s.username}</code></td>
+              <td><strong style="color: #fff;">${s.full_name}</strong></td>
+              <td>${s.class_name ? 'Lớp ' + s.class_name : '-'}</td>
+              <td>${s.gender === 'male' ? 'Nam' : (s.gender === 'female' ? 'Nữ' : 'Khác')}</td>
+              <td><span class="badge badge-green">Hoạt động</span></td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Lớp này chưa có học sinh nào. Hãy thêm thủ công hoặc import Excel!</td></tr>';
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color: #ef4444;">Lỗi tải học sinh: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function handleCreateClass(e) {
+      e.preventDefault();
+      const name = document.getElementById('classNameInput').value.trim();
+      const grade = parseInt(document.getElementById('classGradeInput').value);
+
+      try {
+        const res = await fetch('/api/admin/classes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, grade_level: grade, school_year: '2024-2025' })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.detail);
+        else {
+          alert(data.message);
+          document.getElementById('classNameInput').value = '';
+          loadClassesAndStudents();
+        }
+      } catch (err) {
+        alert('Lỗi tạo lớp: ' + err.message);
+      }
+    }
+
+    function openImportExcelModal() {
+      document.getElementById('importExcelModal').classList.add('active');
+    }
+    function closeImportExcelModal() {
+      document.getElementById('importExcelModal').classList.remove('active');
+    }
+
+    async function submitImportExcel() {
+      const classId = document.getElementById('importClassSelect').value;
+      const fileInput = document.getElementById('excelFileInput');
+      const btn = document.getElementById('btnSubmitExcel');
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Vui lòng chọn file Excel .xlsx!');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('class_id', classId);
+      formData.append('file', fileInput.files[0]);
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang nạp...';
+
+      try {
+        const res = await fetch('/api/admin/students/import-excel', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.detail);
+        else {
+          alert(data.message);
+          closeImportExcelModal();
+          loadClassesAndStudents();
+        }
+      } catch (err) {
+        alert('Lỗi nạp Excel: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Bắt đầu nạp dữ liệu';
+      }
+    }
+
+    function openAddStudentModal() {
+      document.getElementById('addStudentModal').classList.add('active');
+    }
+    function closeAddStudentModal() {
+      document.getElementById('addStudentModal').classList.remove('active');
+    }
+
+    async function submitManualStudent() {
+      const classId = document.getElementById('manualStudentClassSelect').value;
+      const username = document.getElementById('manualUsername').value.trim();
+      const fullName = document.getElementById('manualFullName').value.trim();
+      const password = document.getElementById('manualPassword').value.trim();
+      const gender = document.getElementById('manualGender').value;
+
+      try {
+        const res = await fetch('/api/admin/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            class_id: parseInt(classId),
+            username,
+            full_name: fullName,
+            password,
+            gender
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) alert(data.detail);
+        else {
+          alert(data.message);
+          closeAddStudentModal();
+          loadClassesAndStudents();
+        }
+      } catch (err) {
+        alert('Lỗi thêm học sinh: ' + err.message);
+      }
+    }
+
+    // ==================== BẢNG ĐIỂM & THỐNG KÊ ====================
+    async function loadScoreboardMeta() {
+      try {
+        const res = await fetch('/api/admin/exams');
+        const data = await res.json();
+        const select = document.getElementById('scoreExamFilter');
+        select.innerHTML = '<option value="">-- Chọn bài thi --</option>';
+
+        if (data.exams) {
+          data.exams.forEach(e => {
+            select.add(new Option(e.title, e.id));
+          });
+          if (data.exams.length > 0) {
+            select.value = data.exams[0].id;
+            loadSubmissions();
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi tải meta bảng điểm:', err);
+      }
+    }
+
+    function viewExamSubmissions(examId) {
+      switchAdminTab('scores');
+      document.getElementById('scoreExamFilter').value = examId;
+      loadSubmissions();
+    }
+
+    async function loadSubmissions() {
+      const examId = document.getElementById('scoreExamFilter').value;
+      const classId = document.getElementById('scoreClassFilter').value;
+      const tbody = document.getElementById('submissionTableBody');
+
+      if (!examId) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Vui lòng chọn bài thi!</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Đang tải bảng điểm...</td></tr>';
+
+      try {
+        let url = `/api/admin/exams/${examId}/submissions`;
+        if (classId) url += `?class_id=${classId}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+        const subs = data.submissions || [];
+
+        // Tính thống kê
+        document.getElementById('statTotalSubs').textContent = subs.length;
+        if (subs.length > 0) {
+          const scores = subs.map(s => parseFloat(s.score || 0));
+          const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+          const max = Math.max(...scores);
+          const passCount = scores.filter(s => s >= 5.0).length;
+
+          document.getElementById('statAvgScore').textContent = avg.toFixed(2);
+          document.getElementById('statMaxScore').textContent = max.toFixed(2);
+          document.getElementById('statPassRate').textContent = `${Math.round((passCount / scores.length) * 100)}%`;
+
+          tbody.innerHTML = subs.map((s, idx) => {
+            const sc = parseFloat(s.score || 0);
+            const scoreClass = sc >= 8.0 ? 'high' : (sc >= 5.0 ? 'mid' : 'low');
+            return `
+              <tr>
+                <td><strong>#${idx + 1}</strong></td>
+                <td><strong style="color: #fff;">${s.full_name}</strong></td>
+                <td><code>${s.username}</code></td>
+                <td>${s.class_name ? 'Lớp ' + s.class_name : '-'}</td>
+                <td><span class="score-badge ${scoreClass}">${sc.toFixed(2)}đ</span></td>
+                <td>${s.submitted_at || '-'}</td>
+                <td><span class="badge badge-green">Đã chấm điểm</span></td>
+                <td style="text-align: right;">
+                  <button onclick="viewSubmissionDetail(${s.submission_id})" class="btn btn-outline btn-sm">
+                    <i class="fa-solid fa-file-invoice"></i> Xem bài làm
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          document.getElementById('statAvgScore').textContent = '0.0';
+          document.getElementById('statMaxScore').textContent = '0.0';
+          document.getElementById('statPassRate').textContent = '0%';
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Chưa có học sinh nào làm bài thi này.</td></tr>';
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="color: #ef4444;">Lỗi tải bảng điểm: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function viewSubmissionDetail(submissionId) {
+      const modal = document.getElementById('submissionDetailModal');
+      const body = document.getElementById('submissionDetailBody');
+      modal.classList.add('active');
+      body.innerHTML = 'Đang tải bài làm...';
+
+      try {
+        const res = await fetch(`/api/admin/submissions/${submissionId}`);
+        const data = await res.json();
+        const sub = data.submission;
+
+        body.innerHTML = `
+          <div style="background: #162035; padding: 16px; border-radius: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
+            <div><strong>Thí sinh:</strong> ${sub.full_name} (${sub.username})</div>
+            <div><strong>Lớp:</strong> ${sub.class_name || '-'}</div>
+            <div><strong>Bài thi:</strong> ${sub.exam_title}</div>
+            <div><strong>Thời gian nộp:</strong> ${sub.submitted_at}</div>
+            <div><strong>Điểm đạt:</strong> <span style="font-size: 18px; font-weight: 800; color: #34d399;">${parseFloat(sub.score).toFixed(2)}đ</span></div>
+            <div><strong>Trạng thái:</strong> Hoàn thành</div>
+          </div>
+
+          <h4 style="margin-bottom: 12px; font-size: 15px; color: #fff;">Chi tiết câu trả lời:</h4>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            ${sub.answers.map((ans, idx) => `
+              <div style="background: #111827; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span class="badge badge-blue">Câu ${idx + 1} (${ans.section_title})</span>
+                  <span class="badge ${ans.is_correct ? 'badge-green' : 'badge-gray'}">
+                    ${ans.awarded_points} / ${ans.question_points} đ
+                  </span>
+                </div>
+                <div style="font-size: 14.5px; color: #fff; margin-bottom: 10px;">${ans.question_content}</div>
+                <div style="font-size: 13px; color: var(--text-dim);">
+                  ${ans.text_answer ? `<strong>Trả lời:</strong> ${ans.text_answer}` : ''}
+                  ${ans.selected_option_id ? `<strong>Phương án chọn ID:</strong> ${ans.selected_option_id}` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (err) {
+        body.innerHTML = `<div style="color: #ef4444;">Lỗi tải bài làm: ${err.message}</div>`;
+      }
+    }
+
+    function closeDetailModal() {
+      document.getElementById('submissionDetailModal').classList.remove('active');
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('pisq_user');
+      window.location.href = '/';
+    }
+
+    window.onload = () => {
+      checkAdminAuth();
+      loadAdminExams();
+    };
+  </script>
+</body>
+</html>

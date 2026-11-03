@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PisQ - Hệ thống Thi Trắc nghiệm Chuẩn GDPT 2018</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="exam-header">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <i class="fa-solid fa-graduation-cap" style="font-size: 24px; color: #38bdf8;"></i>
+      <h1 style="font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 0.5px;">PisQ ONLINE EXAM</h1>
+    </div>
+    <div id="userHeaderArea" style="display: flex; align-items: center; gap: 14px;">
+      <a href="/admin" class="btn btn-outline btn-sm"><i class="fa-solid fa-gear"></i> Trang Quản Trị</a>
+    </div>
+  </header>
+
+  <div class="admin-container" style="max-width: 960px; margin-top: 50px;">
+    <!-- Login Card (Hiển thị khi chưa đăng nhập) -->
+    <div id="loginSection" class="card-box" style="max-width: 500px; margin: 0 auto;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="display: inline-flex; width: 56px; height: 56px; border-radius: 14px; background: rgba(56, 189, 248, 0.15); align-items: center; justify-content: center; margin-bottom: 12px;">
+          <i class="fa-solid fa-shield-halved" style="font-size: 26px; color: #38bdf8;"></i>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 700; color: #fff;">Đăng Nhập Hệ Thống</h2>
+        <p style="font-size: 14px; color: var(--text-muted); margin-top: 4px;">Cổng khảo thí trắc nghiệm chuẩn GDPT 2018</p>
+      </div>
+
+      <!-- Role Tabs -->
+      <div style="display: flex; background: #0b0f19; padding: 4px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-color);">
+        <button id="tabStudent" class="nav-tab-btn active" style="flex: 1;" onclick="switchRole('student')">
+          <i class="fa-solid fa-user-graduate"></i> Học Sinh
+        </button>
+        <button id="tabAdmin" class="nav-tab-btn" style="flex: 1;" onclick="switchRole('admin')">
+          <i class="fa-solid fa-chalkboard-user"></i> Giáo Viên / Admin
+        </button>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label">Tên đăng nhập</label>
+          <input type="text" id="usernameInput" class="form-control" placeholder="Nhập tên đăng nhập" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mật khẩu</label>
+          <input type="password" id="passwordInput" class="form-control" placeholder="Nhập mật khẩu" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; margin-top: 10px; font-size: 15px;">
+          <i class="fa-solid fa-right-to-bracket"></i> Đăng Nhập
+        </button>
+      </form>
+
+      <!-- Tài khoản mẫu để test nhanh -->
+      <div style="margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border-color);">
+        <p style="font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px;">
+          <i class="fa-solid fa-bolt"></i> Chọn nhanh tài khoản dùng thử:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" class="btn btn-outline btn-sm" style="justify-content: flex-start; text-align: left;" onclick="fillLogin('nguyenvanan', '123456', 'student')">
+            <i class="fa-solid fa-user" style="color: #38bdf8;"></i>
+            <span><strong>Nguyễn Văn An</strong> (Lớp 12A1) - <code>nguyenvanan / 123456</code></span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" style="justify-content: flex-start; text-align: left;" onclick="fillLogin('admin', 'admin123', 'admin')">
+            <i class="fa-solid fa-user-shield" style="color: #f59e0b;"></i>
+            <span><strong>Quản trị viên / Giáo viên</strong> - <code>admin / admin123</code></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Student Dashboard (Hiển thị khi học sinh đã đăng nhập) -->
+    <div id="studentDashboard" style="display: none;">
+      <div class="card-box" style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="student-avatar" style="width: 48px; height: 48px; font-size: 18px;" id="dashAvatar">A</div>
+          <div>
+            <h2 id="dashStudentName" style="font-size: 20px; font-weight: 700; color: #fff;">Nguyễn Văn An</h2>
+            <p style="font-size: 14px; color: var(--text-muted);"><span id="dashClassName" class="badge badge-blue">Lớp 12A1</span> | Năm học 2024-2025</p>
+          </div>
+        </div>
+        <button onclick="handleLogout()" class="btn btn-outline btn-sm"><i class="fa-solid fa-arrow-right-from-bracket"></i> Đăng xuất</button>
+      </div>
+
+      <div class="card-box">
+        <div class="card-header-bar">
+          <h3 style="font-size: 17px; font-weight: 700; color: #fff;"><i class="fa-solid fa-clipboard-list" style="color: #38bdf8; margin-right: 8px;"></i> Danh Sách Bài Thi Mở</h3>
+          <button onclick="loadStudentExams()" class="btn btn-outline btn-sm"><i class="fa-solid fa-rotate-right"></i> Làm mới</button>
+        </div>
+        <div id="examListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px;">
+          <!-- Exam cards inserted via JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentRole = 'student';
+
+    function checkExistingAuth() {
+      const userStr = localStorage.getItem('pisq_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.role === 'student') {
+          showStudentDashboard(user);
+        } else {
+          window.location.href = '/admin';
+        }
+      }
+    }
+
+    function switchRole(role) {
+      currentRole = role;
+      document.getElementById('tabStudent').classList.toggle('active', role === 'student');
+      document.getElementById('tabAdmin').classList.toggle('active', role === 'admin');
+    }
+
+    function fillLogin(u, p, role) {
+      switchRole(role);
+      document.getElementById('usernameInput').value = u;
+      document.getElementById('passwordInput').value = p;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('usernameInput').value.trim();
+      const password = document.getElementById('passwordInput').value.trim();
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, role: currentRole })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.detail || 'Đăng nhập không thành công');
+          return;
+        }
+
+        localStorage.setItem('pisq_user', JSON.stringify(data.user));
+        if (data.user.role === 'student') {
+          showStudentDashboard(data.user);
+        } else {
+          window.location.href = '/admin';
+        }
+      } catch (err) {
+        alert('Lỗi kết nối máy chủ: ' + err.message);
+      }
+    }
+
+    function showStudentDashboard(user) {
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('studentDashboard').style.display = 'block';
+      document.getElementById('dashStudentName').textContent = user.full_name;
+      document.getElementById('dashClassName').textContent = user.class_name ? `Lớp ${user.class_name}` : 'Học sinh';
+      document.getElementById('dashAvatar').textContent = user.full_name.charAt(0).toUpperCase();
+
+      loadStudentExams();
+    }
+
+    async function loadStudentExams() {
+      const container = document.getElementById('examListContainer');
+      container.innerHTML = '<div style="color: var(--text-dim); padding: 20px;">Đang tải danh sách đề thi...</div>';
+      try {
+        const res = await fetch('/api/student/exams');
+        const data = await res.json();
+        if (data.exams && data.exams.length > 0) {
+          container.innerHTML = data.exams.map(exam => `
+            <div style="background: #162035; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <span class="badge badge-green" style="margin-bottom: 10px;">Đang mở thi</span>
+                <h4 style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 12px;">${exam.title}</h4>
+                <div style="font-size: 13px; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px;">
+                  <div><i class="fa-regular fa-clock" style="color: #38bdf8; width: 18px;"></i> Thời lượng: <strong>${exam.duration_minutes} phút</strong></div>
+                  <div><i class="fa-solid fa-list-check" style="color: #10b981; width: 18px;"></i> Số câu hỏi: <strong>${exam.question_count} câu</strong> (${exam.section_count} phần)</div>
+                  <div><i class="fa-solid fa-star" style="color: #f59e0b; width: 18px;"></i> Thang điểm: <strong>${parseFloat(exam.total_score).toFixed(1)} điểm</strong></div>
+                </div>
+              </div>
+              <button onclick="startExam(${exam.id})" class="btn btn-primary" style="width: 100%;">
+                <i class="fa-solid fa-play"></i> Bắt đầu làm bài
+              </button>
+            </div>
+          `).join('');
+        } else {
+          container.innerHTML = '<div style="color: var(--text-dim); padding: 20px;">Hiện chưa có bài thi nào được mở. Vui lòng quay lại sau!</div>';
+        }
+      } catch (err) {
+        container.innerHTML = '<div style="color: #ef4444;">Lỗi tải đề thi: ' + err.message + '</div>';
+      }
+    }
+
+    function startExam(examId) {
+      window.location.href = `/exam?id=${examId}`;
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('pisq_user');
+      window.location.reload();
+    }
+
+    window.onload = checkExistingAuth;
+  </script>
+</body>
+</html>
