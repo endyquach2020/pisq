@@ -1,6 +1,12 @@
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+import threading
 import uuid
+from io import BytesIO
+from typing import Optional
 import xml.etree.ElementTree as ET
 from docx import Document
 from docx.opc.constants import RELATIONSHIP_TYPE
@@ -12,6 +18,86 @@ OMML_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+VML_NS = "urn:schemas-microsoft-com:vml"
+
+_WORD_MATHTYPE_LOCK = threading.Lock()
+
+
+def _convert_mathtype_to_latex(doc_path: str, doc) -> Optional[bytes]:
+    equation_relationships = []
+    for image in doc._element.body.iter(f'{{{VML_NS}}}imagedata'):
+        shape = image.getparent()
+        while shape is not None and shape.tag.split('}')[-1] != 'shape':
+            shape = shape.getparent()
+        if shape is None or shape.get('{urn:schemas-microsoft-com:office:office}ole') is None:
+            continue
+        relationship_id = image.get(f'{{{R_NS}}}id')
+        if relationship_id:
+            equation_relationships.append(relationship_id)
+
+    if not equation_relationships:
+        return None
+
+    powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+    if powershell is None:
+        raise RuntimeError(
+            "Cần Windows PowerShell, Microsoft Word và MathType để chuyển công thức MathType sang LaTeX."
+        )
+
+    script_path = os.path.join(os.path.dirname(__file__), "convert_mathtype_to_latex.ps1")
+    with tempfile.TemporaryDirectory(prefix="pisq-mathtype-") as temp_dir:
+        converted_docx = os.path.join(temp_dir, "converted.docx")
+        with _WORD_MATHTYPE_LOCK:
+            try:
+                result = subprocess.run(
+                    [
+                        powershell,
+                        "-NoProfile",
+                        "-STA",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        script_path,
+                        "-SourcePath",
+                        os.path.abspath(doc_path),
+                        "-OutputPath",
+                        converted_docx,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=True,
+                )
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "Không tìm thấy Microsoft Word hoặc MathType. Hãy cài cả hai trên máy đang chạy PisQ."
+                ) from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(
+                    "Microsoft Word/MathType chuyển đổi công thức quá lâu. Hãy kiểm tra Word "
+                    "có đang hiện hộp thoại hoặc file Word có mở bình thường không."
+                ) from exc
+            except subprocess.CalledProcessError as exc:
+                details = (exc.stderr or exc.stdout or str(exc)).strip()
+                raise RuntimeError(
+                    "Microsoft Word/MathType không thể chuyển công thức sang LaTeX. "
+                    f"Chi tiết: {details[-1200:]}"
+                ) from exc
+
+        match = re.search(r"ConvertedCount=(\d+)", result.stdout)
+        if not match or int(match.group(1)) != len(equation_relationships):
+            converted_count = match.group(1) if match else "không xác định"
+            raise RuntimeError(
+                "MathType chuyển đổi không đủ công thức sang LaTeX "
+                f"(đã chuyển: {converted_count}, trong tài liệu: {len(equation_relationships)})."
+            )
+
+        try:
+            with open(converted_docx, "rb") as converted_file:
+                return converted_file.read()
+        except FileNotFoundError as exc:
+            raise RuntimeError("MathType không tạo được tài liệu đã chuyển sang LaTeX.") from exc
+
 
 def omml_node_to_latex(elem) -> str:
     """
@@ -82,6 +168,26 @@ def omml_node_to_latex(elem) -> str:
         e = elem.find(f'{{{OMML_NS}}}e')
         return f"\\overline{{{omml_node_to_latex(e) if e is not None else ''}}}"
 
+    elif tag == 'acc':
+        acc_pr = elem.find(f'{{{OMML_NS}}}accPr')
+        accent = acc_pr.find(f'{{{OMML_NS}}}chr') if acc_pr is not None else None
+        accent_value = accent.get(f'{{{OMML_NS}}}val', '') if accent is not None else ''
+        e = elem.find(f'{{{OMML_NS}}}e')
+        expression = omml_node_to_latex(e) if e is not None else ''
+        accent_commands = {
+            '\u20d7': '\\vec',
+            '\u20d6': '\\overleftarrow',
+            '\u0302': '\\hat',
+            '\u0303': '\\tilde',
+            '\u0305': '\\bar',
+        }
+        command = accent_commands.get(accent_value)
+        if command:
+            return f"{command}{{{expression}}}"
+        if accent_value:
+            return f"\\overset{{{accent_value}}}{{{expression}}}"
+        return expression
+
     elif tag == 'func':
         fName = elem.find(f'{{{OMML_NS}}}fName')
         e = elem.find(f'{{{OMML_NS}}}e')
@@ -90,13 +196,34 @@ def omml_node_to_latex(elem) -> str:
         return f"{fn_str} {e_str}"
 
     elif tag == 'nary':
+        nary_pr = elem.find(f'{{{OMML_NS}}}naryPr')
+        chr_elem = nary_pr.find(f'{{{OMML_NS}}}chr') if nary_pr is not None else None
+        operator = chr_elem.get(f'{{{OMML_NS}}}val', '') if chr_elem is not None else ''
+        operator_commands = {
+            '\u222b': '\\int',
+            '\u222c': '\\iint',
+            '\u222d': '\\iiint',
+            '\u2211': '\\sum',
+            '\u220f': '\\prod',
+            '\u222e': '\\oint',
+        }
+        command = operator_commands.get(operator, '\\int')
         sub = elem.find(f'{{{OMML_NS}}}sub')
         sup = elem.find(f'{{{OMML_NS}}}sup')
         e = elem.find(f'{{{OMML_NS}}}e')
         sub_str = f"_{{{omml_node_to_latex(sub)}}}" if sub is not None else ""
         sup_str = f"^{{{omml_node_to_latex(sup)}}}" if sup is not None else ""
         e_str = omml_node_to_latex(e) if e is not None else ""
-        return f"\\int{sub_str}{sup_str} {e_str}"
+        return f"{command}{sub_str}{sup_str} {e_str}"
+
+    elif tag in ['limLow', 'limUpp']:
+        e = elem.find(f'{{{OMML_NS}}}e')
+        limit = elem.find(f'{{{OMML_NS}}}lim')
+        e_str = omml_node_to_latex(e) if e is not None else ""
+        limit_str = omml_node_to_latex(limit) if limit is not None else ""
+        if tag == 'limLow':
+            return f"{{{e_str}}}_{{{limit_str}}}"
+        return f"{{{e_str}}}^{{{limit_str}}}"
 
     elif tag == 'r':
         t = elem.find(f'{{{OMML_NS}}}t')
@@ -117,38 +244,152 @@ def omml_node_to_latex(elem) -> str:
             res.append(omml_node_to_latex(c))
         return "".join(res)
 
-def extract_images_from_element(element, doc) -> list:
+
+def _enhance_math_alpha(alpha):
+    alpha_lut = [
+        round(255 * (value / 255) ** 0.65)
+        for value in range(256)
+    ]
+    return alpha.point(alpha_lut)
+
+
+def extract_images_from_element(element, doc, mathtype_images=None) -> list:
     """
-    Trích xuất hình ảnh Inline (w:drawing, a:blip) từ một thẻ XML và lưu vào static/uploads.
-    Trả về danh sách URL ảnh đã lưu.
+    Trích xuất ảnh DrawingML/VML và lưu cùng thông tin hiển thị MathType từ Word.
     """
-    image_urls = []
-    # Tìm tất cả thẻ blip có liên kết hình ảnh
-    blips = element.findall(f'.//{{{DRAWING_NS}}}blip')
-    for blip in blips:
-        rId = blip.get(f'{{{R_NS}}}embed')
-        if rId and rId in doc.part.related_parts:
-            image_part = doc.part.related_parts[rId]
-            # Xác định extension từ content_type
-            content_type = image_part.content_type
-            ext = ".png"
-            if "jpeg" in content_type or "jpg" in content_type:
-                ext = ".jpg"
-            elif "gif" in content_type:
-                ext = ".gif"
-            elif "svg" in content_type:
-                ext = ".svg"
+    image_references = [
+        {
+            "relationship_id": blip.get(f'{{{R_NS}}}embed'),
+            "inline_math": False,
+            "style": "",
+        }
+        for blip in element.findall(f'.//{{{DRAWING_NS}}}blip')
+    ]
+    for image in element.findall(f'.//{{{VML_NS}}}imagedata'):
+        shape = image.getparent()
+        while shape is not None and shape.tag.split('}')[-1] != 'shape':
+            shape = shape.getparent()
 
-            filename = f"img_{uuid.uuid4().hex[:12]}{ext}"
-            file_path = os.path.join(UPLOAD_DIR, filename)
-            with open(file_path, "wb") as f:
-                f.write(image_part.blob)
+        shape_style = shape.get('style', '') if shape is not None else ''
+        is_math_type = (
+            shape is not None
+            and shape.get('{urn:schemas-microsoft-com:office:office}ole') is not None
+        )
+        display_dimensions = []
+        if is_math_type:
+            for dimension in ('width', 'height'):
+                match = re.search(
+                    rf'(?:^|;)\s*{dimension}\s*:\s*(\d+(?:\.\d+)?)\s*(pt|px|in|cm|mm)\b',
+                    shape_style,
+                    re.IGNORECASE,
+                )
+                if match:
+                    value = float(match.group(1))
+                    if 0 < value <= 1200:
+                        display_dimensions.append(
+                            f'{dimension}:{match.group(1)}{match.group(2).lower()}'
+                        )
 
-            image_urls.append(f"/static/uploads/{filename}")
+        image_references.append({
+            "relationship_id": image.get(f'{{{R_NS}}}id'),
+            "inline_math": is_math_type,
+            "style": ';'.join(display_dimensions),
+        })
 
-    return image_urls
+    extracted_images = []
+    for reference in image_references:
+        relationship_id = reference["relationship_id"]
+        if not relationship_id or relationship_id not in doc.part.related_parts:
+            continue
 
-def parse_paragraph_to_html(p, doc) -> tuple[str, bool]:
+        image_part = doc.part.related_parts[relationship_id]
+        content_type = image_part.content_type.lower()
+        extension_by_type = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/svg+xml": ".svg",
+            "image/webp": ".webp",
+            "image/bmp": ".bmp",
+        }
+        extension = extension_by_type.get(content_type)
+        image_data = image_part.blob
+        rendered_by_word = (
+            reference["inline_math"]
+            and mathtype_images is not None
+            and relationship_id in mathtype_images
+        )
+        if rendered_by_word:
+            image_data = mathtype_images[relationship_id]
+            extension = ".png"
+            try:
+                from PIL import Image, ImageOps
+            except ModuleNotFoundError as exc:
+                if exc.name != "PIL":
+                    raise
+                raise RuntimeError(
+                    "Cần cài Pillow để xử lý ảnh công thức do Microsoft Word kết xuất."
+                ) from exc
+
+            try:
+                with Image.open(BytesIO(image_data)) as image:
+                    alpha = ImageOps.invert(image.convert("RGB").convert("L"))
+                    alpha = _enhance_math_alpha(alpha)
+                    equation_image = Image.new("RGBA", image.size, (255, 255, 255, 0))
+                    equation_image.putalpha(alpha)
+                    converted = BytesIO()
+                    equation_image.save(converted, format="PNG")
+                    image_data = converted.getvalue()
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    "Không thể xử lý ảnh công thức MathType do Microsoft Word kết xuất."
+                ) from exc
+
+        if extension is None and not rendered_by_word:
+            try:
+                from PIL import Image, ImageOps
+            except ModuleNotFoundError as exc:
+                if exc.name != "PIL":
+                    raise
+                raise RuntimeError(
+                    "Cần cài Pillow để chuyển công thức/hình VML sang định dạng hiển thị."
+                ) from exc
+
+            try:
+                with Image.open(BytesIO(image_data)) as image:
+                    image_format = image.format
+                    if image_format in {"WMF", "EMF"}:
+                        image.load(dpi=300)
+                    converted = BytesIO()
+                    if reference["inline_math"] and image_format in {"WMF", "EMF"}:
+                        alpha = ImageOps.invert(image.convert("RGB").convert("L"))
+                        alpha = _enhance_math_alpha(alpha)
+                        equation_image = Image.new("RGBA", image.size, (255, 255, 255, 0))
+                        equation_image.putalpha(alpha)
+                    else:
+                        equation_image = image.convert("RGBA")
+                    equation_image.save(converted, format="PNG", dpi=(300, 300))
+                    image_data = converted.getvalue()
+                    extension = ".png"
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    f"Không thể chuyển ảnh/công thức nhúng ({content_type}) sang định dạng hiển thị."
+                ) from exc
+
+        filename = f"img_{uuid.uuid4().hex[:12]}{extension}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as f:
+            f.write(image_data)
+
+        extracted_images.append({
+            "url": f"/static/uploads/{filename}",
+            "inline_math": reference["inline_math"],
+            "style": reference["style"],
+        })
+
+    return extracted_images
+
+def parse_paragraph_to_html(p, doc, mathtype_images=None) -> tuple[str, bool]:
     """
     Bóc tách đoạn văn:
     - Text thường
@@ -159,41 +400,67 @@ def parse_paragraph_to_html(p, doc) -> tuple[str, bool]:
     parts = []
     has_underline = False
 
-    for child in p._p:
+    def append_child_content(child):
+        nonlocal has_underline
         tag = child.tag.split('}')[-1]
 
-        # 1. Đoạn text / inline image trong w:r
-        if tag == 'r':
-            # Kiểm tra gạch chân
-            rPr = child.find(f'{{{W_NS}}}rPr')
-            if rPr is not None:
-                u = rPr.find(f'{{{W_NS}}}u')
-                if u is not None:
-                    u_val = u.get(f'{{{W_NS}}}val')
-                    if u_val is None or u_val != 'none':
-                        has_underline = True
-
-            # Kiểm tra ảnh nhúng trong w:r
-            imgs = extract_images_from_element(child, doc)
-            for img_url in imgs:
-                parts.append(f'<div class="exam-img-box"><img src="{img_url}" class="exam-img" alt="Hình ảnh câu hỏi" /></div>')
-
-            # Lấy text
-            t = child.find(f'{{{W_NS}}}t')
-            if t is not None and t.text:
-                parts.append(t.text)
-
-        # 2. Công thức toán OMML
-        elif tag in ['oMath', 'oMathPara']:
+        if tag in ['oMath', 'oMathPara']:
             latex = omml_node_to_latex(child).strip()
             if latex:
                 parts.append(f" ${latex}$ ")
+            return
 
-        # 3. Ảnh nhúng nằm trực tiếp trong w:drawing ngoài w:r
-        elif tag == 'drawing':
-            imgs = extract_images_from_element(child, doc)
-            for img_url in imgs:
-                parts.append(f'<div class="exam-img-box"><img src="{img_url}" class="exam-img" alt="Hình ảnh câu hỏi" /></div>')
+        if tag == 'r':
+            run_properties = child.find(f'{{{W_NS}}}rPr')
+            underline = run_properties.find(f'{{{W_NS}}}u') if run_properties is not None else None
+            if underline is not None and underline.get(f'{{{W_NS}}}val') != 'none':
+                has_underline = True
+
+            for run_child in child:
+                run_tag = run_child.tag.split('}')[-1]
+                if run_tag == 't' and run_child.text:
+                    parts.append(run_child.text)
+                elif run_tag in ['tab']:
+                    parts.append(' ')
+                elif run_tag in ['br', 'cr']:
+                    parts.append('<br/>')
+                elif run_tag in ['drawing', 'pict', 'object']:
+                    for image in extract_images_from_element(run_child, doc, mathtype_images):
+                        if image["inline_math"]:
+                            style_attribute = (
+                                f' style="{image["style"]}"' if image["style"] else ''
+                            )
+                            parts.append(
+                                f'<img src="{image["url"]}" class="inline-math-img"{style_attribute} alt="Công thức MathType" />'
+                            )
+                        else:
+                            parts.append(
+                                f'<div class="exam-img-box"><img src="{image["url"]}" class="exam-img" alt="Hình ảnh câu hỏi" /></div>'
+                            )
+                elif run_tag not in ['rPr']:
+                    append_child_content(run_child)
+            return
+
+        if tag in ['drawing', 'pict', 'object']:
+            for image in extract_images_from_element(child, doc, mathtype_images):
+                if image["inline_math"]:
+                    style_attribute = (
+                        f' style="{image["style"]}"' if image["style"] else ''
+                    )
+                    parts.append(
+                        f'<img src="{image["url"]}" class="inline-math-img"{style_attribute} alt="Công thức MathType" />'
+                    )
+                else:
+                    parts.append(
+                        f'<div class="exam-img-box"><img src="{image["url"]}" class="exam-img" alt="Hình ảnh câu hỏi" /></div>'
+                    )
+            return
+
+        for nested_child in child:
+            append_child_content(nested_child)
+
+    for child in p._p:
+        append_child_content(child)
 
     content = "".join(parts).strip()
     return content, has_underline
@@ -207,6 +474,9 @@ def parse_docx_file(doc_path: str) -> list:
     - <#g4>: Phần IV (Tự luận / Tiếng Anh)
     """
     doc = Document(doc_path)
+    converted_docx = _convert_mathtype_to_latex(doc_path, doc)
+    if converted_docx is not None:
+        doc = Document(BytesIO(converted_docx))
     sections = []
     current_sec = None
     current_q = None
@@ -230,7 +500,6 @@ def parse_docx_file(doc_path: str) -> list:
             title_text = re.sub(r'<#g[1-4]>', '', content, flags=re.IGNORECASE).strip()
             if not title_text:
                 title_text = default_titles.get(sec_type, f"Phần {sec_type.upper()}")
-
             current_sec = {
                 "section_type": sec_type,
                 "title": title_text,
@@ -240,14 +509,13 @@ def parse_docx_file(doc_path: str) -> list:
             current_q = None
             continue
 
-        # Nếu chưa gặp tag nào mà đã xuất hiện câu hỏi, gán mặc định vào g1
+        # A question must belong to an explicitly tagged section.
         if current_sec is None:
-            current_sec = {
-                "section_type": "g1",
-                "title": "PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn",
-                "questions": []
-            }
-            sections.append(current_sec)
+            if re.match(r'^(Câu|Question|Bài)\s*\d+[\.:]', content, re.IGNORECASE):
+                raise ValueError(
+                    "Câu hỏi chưa thuộc phần nào. Hãy thêm thẻ <#g1>, <#g2>, <#g3> hoặc <#g4> trước câu hỏi."
+                )
+            continue
 
         # 2. Nhận diện Bắt đầu câu hỏi ("Câu 1.", "Câu 1:", "Question 1:", "Bài 1:",...)
         q_match = re.match(r'^(Câu|Question|Bài)\s*(\d+)[\.:]\s*(.*)', content, re.IGNORECASE | re.DOTALL)
@@ -266,7 +534,12 @@ def parse_docx_file(doc_path: str) -> list:
         # 3. Nhận diện Phương án ("A.", "B.", "C.", "D." hoặc "a)", "b)", "c)", "d)")
         opt_match = re.match(r'^([A-Da-d])[\.:\)]\s*(.*)', content, re.DOTALL)
         if opt_match and current_q is not None:
-            opt_letter = opt_match.group(1).upper()
+            opt_letter = opt_match.group(1)
+            opt_letter = (
+                opt_letter.lower()
+                if current_sec["section_type"] in ["g2", "g4"]
+                else opt_letter.upper()
+            )
             opt_content = opt_match.group(2).strip()
 
             current_q["options"].append({
@@ -276,12 +549,20 @@ def parse_docx_file(doc_path: str) -> list:
             })
             continue
 
-        # 4. Nhận diện đáp án ngắn (nếu có ghi "Đáp án: ...")
-        ans_match = re.match(r'^(Đáp án|Answer)[\.:]\s*(.*)', content, re.IGNORECASE)
+        # 4. Đáp án chuẩn của câu trả lời ngắn phải có tiền tố DA. hoặc DA:
+        ans_match = re.match(r'^DA[.:]\s*(.*)', content, re.IGNORECASE)
         if ans_match and current_q is not None:
-            ans_val = ans_match.group(2).strip()
+            ans_val = ans_match.group(1).strip()
             current_q["short_answer"] = ans_val
             continue
+        if (
+            current_q is not None
+            and current_sec["section_type"] == "g3"
+            and re.match(r'^(DA\b|Đáp án\b|Answer\b)', content, re.IGNORECASE)
+        ):
+            raise ValueError(
+                "Đáp án câu trả lời ngắn phải bắt đầu bằng tiền tố bắt buộc 'DA.' hoặc 'DA:', ví dụ: DA. 12."
+            )
 
         # 5. Nếu không khớp phương án mà đang trong câu hỏi -> Đây là dòng mô tả/hình ảnh tiếp nối của câu hỏi
         if current_q is not None and not current_q["options"]:
@@ -289,5 +570,19 @@ def parse_docx_file(doc_path: str) -> list:
         elif current_q is not None and current_q["options"]:
             # Dòng tiếp nối của phương án trước đó
             current_q["options"][-1]["content"] += f"<br/>{content}"
+
+    for section in sections:
+        if section["section_type"] != "g3" or not section["questions"]:
+            continue
+
+        questions = section["questions"]
+        if all(
+            not question["short_answer"]
+            and len(question["options"]) == 4
+            and {option["label"] for option in question["options"]} == {"A", "B", "C", "D"}
+            and sum(option["is_correct"] for option in question["options"]) == 1
+            for question in questions
+        ):
+            section["section_type"] = "g1"
 
     return sections

@@ -1,8 +1,12 @@
 import os
 import re
 import json
+import asyncio
 import random
+import secrets
+import time
 import datetime
+import unicodedata
 from typing import Optional, List
 import openpyxl
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
@@ -14,8 +18,19 @@ from pydantic import BaseModel
 import database
 from database import get_db, hash_password
 from docx_parser import parse_docx_file, UPLOAD_DIR
+from google_drive import (
+    DriveConfigurationError,
+    DriveUploadError,
+    upload_pdf_to_drive,
+)
+from results_export import build_student_submission_pdf
 
 app = FastAPI(title="PisQ Exam System", version="2.0.0")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=int(os.getenv("PORT", "3000")), reload=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +50,37 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.on_event("startup")
 def startup_event():
     # Khởi tạo dữ liệu mẫu nếu DB trống
-    database.init_default_data()
+    try:
+        database.init_default_data()
+        with get_db() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE exam_submissions
+                    SET drive_upload_status = 'pending',
+                        drive_upload_attempts = 0
+                    WHERE drive_upload_status = 'uploading'
+                """)
+            conn.commit()
+        asyncio.create_task(submission_drive_upload_worker())
+    except Exception as exc:
+        print(f"[STARTUP] Không thể khởi tạo dữ liệu mặc định: {exc}")
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "detail": exc.detail}
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    detail = str(exc) if str(exc) else "Lỗi máy chủ không xác định."
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "detail": detail}
+    )
+
 
 # ==================== DATA SCHEMAS ====================
 class LoginRequest(BaseModel):
@@ -55,6 +100,10 @@ class CreateStudentRequest(BaseModel):
     class_id: int
     gender: Optional[str] = "other"
     date_of_birth: Optional[str] = None
+
+class ResetStudentPasswordRequest(BaseModel):
+    admin_username: str
+    admin_password: str
 
 class ExamConfigSection(BaseModel):
     id: int
@@ -76,6 +125,25 @@ class SaveAnswerRequest(BaseModel):
     selected_option_id: Optional[int] = None
     text_answer: Optional[str] = None
     tf_answers: Optional[dict] = None  # { "option_id": "true" | "false" }
+
+class QuestionOptionInput(BaseModel):
+    id: Optional[int] = None
+    option_label: Optional[str] = None
+    content: str
+    is_correct: Optional[int] = 0
+    order_index: Optional[int] = 1
+
+class UpdateQuestionRequest(BaseModel):
+    content: str
+    points: Optional[float] = None
+    explanation: Optional[str] = None
+    options: Optional[List[QuestionOptionInput]] = None
+
+class CreateQuestionRequest(BaseModel):
+    content: str
+    points: Optional[float] = 0.25
+    explanation: Optional[str] = ""
+    options: Optional[List[QuestionOptionInput]] = []
 
 # ==================== AUTHENTICATION APIS ====================
 @app.post("/api/auth/login")
@@ -171,6 +239,57 @@ def get_students(class_id: Optional[int] = None):
     finally:
         conn.close()
 
+
+@app.post("/api/admin/students/{student_id}/reset-password")
+def reset_student_password(student_id: int, req: ResetStudentPasswordRequest):
+    temporary_password = "".join(
+        secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789")
+        for _ in range(10)
+    )
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id FROM users
+                WHERE username = %s AND password_hash = %s
+                  AND role IN ('admin', 'teacher') AND is_active = 1
+                """,
+                (req.admin_username.strip(), hash_password(req.admin_password)),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(
+                    status_code=403,
+                    detail="Xác thực quản trị không thành công.",
+                )
+
+            cursor.execute(
+                "SELECT id FROM users WHERE id = %s AND role = 'student'",
+                (student_id,),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Không tìm thấy học sinh!")
+
+            cursor.execute(
+                "UPDATE users SET password_hash = %s WHERE id = %s AND role = 'student'",
+                (hash_password(temporary_password), student_id),
+            )
+        conn.commit()
+        return {
+            "status": "success",
+            "message": "Đã đặt lại mật khẩu học sinh.",
+            "temporary_password": temporary_password,
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Không thể đặt lại mật khẩu học sinh.") from exc
+    finally:
+        conn.close()
+
+
 @app.post("/api/admin/students")
 def create_student(req: CreateStudentRequest):
     conn = get_db()
@@ -190,6 +309,7 @@ def create_student(req: CreateStudentRequest):
         conn.commit()
         return {"status": "success", "message": "Thêm học sinh thành công!", "student_id": sid}
     except HTTPException:
+        conn.rollback()
         raise
     except Exception as e:
         conn.rollback()
@@ -268,15 +388,16 @@ def get_all_exams():
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT e.*, 
+                SELECT e.*, c.name as class_name,
                        COUNT(DISTINCT s.id) as section_count,
                        COUNT(DISTINCT q.id) as question_count,
                        COUNT(DISTINCT sub.id) as submission_count
                 FROM exams e
+                LEFT JOIN classes c ON c.id = e.class_id
                 LEFT JOIN exam_sections s ON s.exam_id = e.id
                 LEFT JOIN questions q ON q.section_id = s.id
                 LEFT JOIN exam_submissions sub ON sub.exam_id = e.id
-                GROUP BY e.id
+                GROUP BY e.id, c.name
                 ORDER BY e.id DESC
             """)
             exams = cursor.fetchall()
@@ -313,6 +434,7 @@ def get_exam_detail(exam_id: int):
 @app.post("/api/admin/exams/import-docx")
 async def import_exam_docx(
     title: str = Form(...),
+    class_id: Optional[int] = Form(None),
     duration_minutes: int = Form(45),
     total_score: float = Form(10.0),
     is_published: int = Form(1),
@@ -320,6 +442,18 @@ async def import_exam_docx(
 ):
     if not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="Vui lòng chỉ tải lên file Word định dạng .docx")
+    if class_id is not None:
+        if class_id <= 0:
+            raise HTTPException(status_code=400, detail="Lớp được chọn không hợp lệ.")
+
+        conn = get_db()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=400, detail="Lớp được chọn không tồn tại.")
+        finally:
+            conn.close()
 
     temp_path = os.path.join(UPLOAD_DIR, f"temp_{datetime.datetime.now().timestamp()}_{file.filename}")
     try:
@@ -340,9 +474,9 @@ async def import_exam_docx(
 
             # 1. Thêm vào bảng exams
             cursor.execute("""
-                INSERT INTO exams (title, creator_id, total_score, duration_minutes, is_published)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (title.strip(), creator_id, total_score, duration_minutes, is_published))
+                INSERT INTO exams (title, creator_id, class_id, total_score, duration_minutes, is_published)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (title.strip(), creator_id, class_id, total_score, duration_minutes, is_published))
             exam_id = cursor.lastrowid
 
             # Tính điểm mặc định cho từng phần
@@ -471,6 +605,195 @@ def delete_exam(exam_id: int):
     finally:
         conn.close()
 
+# ==================== ADMIN: QUẢN LÝ CÂU HỎI & ĐÁP ÁN ====================
+@app.get("/api/admin/exams/{exam_id}/questions")
+def get_exam_questions(exam_id: int):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id, title, duration_minutes, total_score, is_published FROM exams WHERE id = %s", (exam_id,))
+            exam = cursor.fetchone()
+            if not exam:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bài thi!")
+
+            cursor.execute("SELECT * FROM exam_sections WHERE exam_id = %s ORDER BY order_index ASC", (exam_id,))
+            sections = cursor.fetchall()
+
+            total_questions = 0
+            for sec in sections:
+                cursor.execute("SELECT * FROM questions WHERE section_id = %s ORDER BY order_index ASC", (sec['id'],))
+                questions = cursor.fetchall()
+                for q in questions:
+                    total_questions += 1
+                    q['points'] = float(q['points'])
+                    cursor.execute("SELECT * FROM question_options WHERE question_id = %s ORDER BY order_index ASC", (q['id'],))
+                    q['options'] = cursor.fetchall()
+                sec['questions'] = questions
+
+            exam['sections'] = sections
+            exam['total_questions'] = total_questions
+            return {"status": "success", "exam": exam}
+    finally:
+        conn.close()
+
+@app.get("/api/admin/questions/{question_id}")
+def get_question_detail(question_id: int):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT q.*, s.section_type, s.title as section_title, s.exam_id, e.title as exam_title
+                FROM questions q
+                JOIN exam_sections s ON q.section_id = s.id
+                JOIN exams e ON s.exam_id = e.id
+                WHERE q.id = %s
+            """, (question_id,))
+            q = cursor.fetchone()
+            if not q:
+                raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi!")
+
+            q['points'] = float(q['points'])
+            cursor.execute("SELECT * FROM question_options WHERE question_id = %s ORDER BY order_index ASC", (question_id,))
+            q['options'] = cursor.fetchall()
+            return {"status": "success", "question": q}
+    finally:
+        conn.close()
+
+@app.put("/api/admin/questions/{question_id}")
+def update_question(question_id: int, req: UpdateQuestionRequest):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            # 1. Kiểm tra câu hỏi tồn tại
+            cursor.execute("""
+                SELECT q.*, s.section_type, s.exam_id 
+                FROM questions q 
+                JOIN exam_sections s ON q.section_id = s.id 
+                WHERE q.id = %s
+            """, (question_id,))
+            existing = cursor.fetchone()
+            if not existing:
+                raise HTTPException(status_code=404, detail="Không tìm thấy câu hỏi!")
+
+            pts = req.points if req.points is not None else float(existing['points'])
+            exp = req.explanation if req.explanation is not None else existing.get('explanation', '')
+
+            # 2. Cập nhật thông tin câu hỏi
+            cursor.execute("""
+                UPDATE questions 
+                SET content = %s, points = %s, explanation = %s
+                WHERE id = %s
+            """, (req.content.strip(), pts, exp, question_id))
+
+            # 3. Đồng bộ các đáp án / phương án lựa chọn
+            if req.options is not None:
+                cursor.execute("SELECT id FROM question_options WHERE question_id = %s", (question_id,))
+                current_db_opt_ids = {row['id'] for row in cursor.fetchall()}
+
+                kept_opt_ids = set()
+                default_labels = ['A', 'B', 'C', 'D', 'E', 'F'] if existing['section_type'] != 'g2' else ['a', 'b', 'c', 'd', 'e', 'f']
+
+                for idx, opt in enumerate(req.options):
+                    lbl = opt.option_label or (default_labels[idx] if idx < len(default_labels) else f"OPT_{idx+1}")
+                    if existing['section_type'] == 'g1':
+                        lbl = default_labels[idx] if idx < len(default_labels) else f"OPT_{idx+1}"
+                    lbl = lbl.strip()
+                    is_corr = 1 if opt.is_correct else 0
+
+                    if opt.id and opt.id in current_db_opt_ids:
+                        cursor.execute("""
+                            UPDATE question_options
+                            SET option_label = %s, content = %s, is_correct = %s, order_index = %s
+                            WHERE id = %s AND question_id = %s
+                        """, (lbl, opt.content.strip(), is_corr, idx + 1, opt.id, question_id))
+                        kept_opt_ids.add(opt.id)
+                    else:
+                        cursor.execute("""
+                            INSERT INTO question_options (question_id, option_label, content, is_correct, order_index)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (question_id, lbl, opt.content.strip(), is_corr, idx + 1))
+                        kept_opt_ids.add(cursor.lastrowid)
+
+                # Xóa những phương án bị gỡ bỏ
+                to_delete_ids = current_db_opt_ids - kept_opt_ids
+                if to_delete_ids:
+                    format_strings = ','.join(['%s'] * len(to_delete_ids))
+                    cursor.execute(
+                        f"DELETE FROM question_options WHERE id IN ({format_strings}) AND question_id = %s",
+                        tuple(to_delete_ids) + (question_id,)
+                    )
+
+            conn.commit()
+            return {
+                "status": "success",
+                "message": "Cập nhật câu hỏi và đáp án thành công!",
+                "question_id": question_id
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.post("/api/admin/sections/{section_id}/questions")
+def create_question(section_id: int, req: CreateQuestionRequest):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM exam_sections WHERE id = %s", (section_id,))
+            sec = cursor.fetchone()
+            if not sec:
+                raise HTTPException(status_code=404, detail="Không tìm thấy phần thi!")
+
+            cursor.execute("SELECT COALESCE(MAX(order_index), 0) + 1 as next_order FROM questions WHERE section_id = %s", (section_id,))
+            next_order = cursor.fetchone()['next_order']
+
+            cursor.execute("""
+                INSERT INTO questions (section_id, content, order_index, points, explanation)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (section_id, req.content.strip(), next_order, req.points, req.explanation or None))
+            new_qid = cursor.lastrowid
+
+            default_labels = ['A', 'B', 'C', 'D', 'E', 'F'] if sec['section_type'] != 'g2' else ['a', 'b', 'c', 'd', 'e', 'f']
+            if req.options:
+                for idx, opt in enumerate(req.options):
+                    lbl = opt.option_label or (default_labels[idx] if idx < len(default_labels) else f"OPT_{idx+1}")
+                    is_corr = 1 if opt.is_correct else 0
+                    cursor.execute("""
+                        INSERT INTO question_options (question_id, option_label, content, is_correct, order_index)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (new_qid, lbl.strip(), opt.content.strip(), is_corr, idx + 1))
+
+            conn.commit()
+            return {
+                "status": "success",
+                "message": "Thêm câu hỏi mới thành công!",
+                "question_id": new_qid
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.delete("/api/admin/questions/{question_id}")
+def delete_question(question_id: int):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM questions WHERE id = %s", (question_id,))
+            conn.commit()
+            return {"status": "success", "message": "Đã xóa câu hỏi thành công!"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 @app.get("/api/admin/exams/{exam_id}/submissions")
 def get_exam_submissions(exam_id: int, class_id: Optional[int] = None):
     """Lấy danh sách bảng điểm của học sinh làm bài thi này."""
@@ -498,6 +821,320 @@ def get_exam_submissions(exam_id: int, class_id: Optional[int] = None):
             return {"status": "success", "submissions": subs}
     finally:
         conn.close()
+
+
+def build_student_submission_export(submission_id: int):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT sub.id, sub.student_id, sub.status, sub.score, sub.submitted_at,
+                       sub.shuffled_data, u.full_name, u.username, c.name AS class_name,
+                       e.title AS exam_title, e.total_score
+                FROM exam_submissions sub
+                JOIN users u ON u.id = sub.student_id
+                LEFT JOIN classes c ON c.id = u.class_id
+                JOIN exams e ON e.id = sub.exam_id
+                WHERE sub.id = %s
+                """,
+                (submission_id,),
+            )
+            submission = cursor.fetchone()
+            if not submission:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bài nộp!")
+            if submission["status"] not in ("submitted", "graded", "timed_out"):
+                raise HTTPException(status_code=409, detail="Bài thi chưa được nộp.")
+
+            cursor.execute(
+                """
+                SELECT question_id, selected_option_id, text_answer, essay_file_url,
+                       awarded_points
+                FROM student_answers
+                WHERE submission_id = %s
+                """,
+                (submission_id,),
+            )
+            answers = {
+                answer["question_id"]: answer for answer in cursor.fetchall()
+            }
+
+        sections = json.loads(submission["shuffled_data"] or "[]")
+        for section in sections:
+            for question in section.get("questions", []):
+                question["section_type"] = section["section_type"]
+                answer = answers.get(question["id"], {})
+                original_options = question.get("options", [])
+                question["earned_points"] = answer.get("awarded_points") or 0
+                question["possible_points"] = question.get("points") or 0
+                question["student_answer"] = "-"
+                question["answers"] = []
+                question["options"] = (
+                    [
+                        {
+                            "id": option.get("id"),
+                            "label": option.get("label"),
+                            "content": option.get("content", ""),
+                            "is_correct": bool(option.get("is_correct")),
+                            "is_selected": option.get("id") == answer.get("selected_option_id"),
+                        }
+                        for option in original_options
+                    ]
+                    if section["section_type"] != "g3"
+                    else []
+                )
+
+                if section["section_type"] == "g1":
+                    selected_option = next(
+                        (
+                            option for option in original_options
+                            if option["id"] == answer.get("selected_option_id")
+                        ),
+                        None,
+                    )
+                    if selected_option:
+                        question["student_answer"] = (
+                            f"{selected_option.get('label', '')}. "
+                            f"{selected_option.get('content', '')}"
+                        )
+                elif section["section_type"] == "g2":
+                    text_answer = answer.get("text_answer")
+                    try:
+                        selected_answers = json.loads(text_answer or "{}")
+                    except json.JSONDecodeError:
+                        selected_answers = {}
+                    question["student_tf_answers"] = selected_answers
+                    question["answers"] = [
+                        f"{option.get('label', '')}) {option.get('content', '')} - "
+                        f"{'Đúng' if selected_answers.get(str(option['id'])) in (True, 'true') else 'Sai'}"
+                        for option in original_options
+                        if str(option["id"]) in selected_answers
+                    ]
+                else:
+                    question["correct_short_answer"] = next(
+                        (
+                            option.get("content")
+                            for option in original_options
+                            if option.get("is_correct")
+                        ),
+                        None,
+                    )
+                    question["student_answer"] = (
+                        answer.get("text_answer")
+                        or answer.get("essay_file_url")
+                        or "-"
+                    )
+
+        pdf_bytes = build_student_submission_pdf(
+            submission["exam_title"],
+            submission["full_name"],
+            submission["username"],
+            submission["class_name"],
+            submission["score"],
+            submission["total_score"],
+            submission["submitted_at"],
+            sections,
+            submission["status"],
+        )
+        return pdf_bytes, submission
+    finally:
+        conn.close()
+
+
+def _submission_pdf_filename(submission: dict) -> str:
+    def safe_component(value: object, fallback: str) -> str:
+        text = str(value or "").replace("đ", "d").replace("Đ", "D")
+        text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+        text = re.sub(r"[^A-Za-z0-9._ -]+", "-", text)
+        text = re.sub(r"\s+", " ", text).strip(" ._-")
+        return text or fallback
+
+    class_name = safe_component(submission.get("class_name"), "Lop")
+    exam_title = safe_component(submission.get("exam_title"), "Bai kiem tra")
+    username = safe_component(
+        submission.get("username"),
+        f"hoc-sinh-{submission.get('student_id', '')}",
+    )
+    random_suffix = f"{secrets.randbelow(1000):03d}"
+    return f"{class_name}_{exam_title}_{username}_{random_suffix}.pdf"
+
+
+def upload_student_submission(submission_id: int):
+    try:
+        pdf_bytes, submission = build_student_submission_export(submission_id)
+        uploaded_file = upload_pdf_to_drive(
+            pdf_bytes,
+            _submission_pdf_filename(submission),
+        )
+    except (DriveConfigurationError, DriveUploadError, RuntimeError) as exc:
+        return {"status": "failed", "detail": str(exc)}
+
+    return {
+        "status": "uploaded",
+        "message": "Đã gửi bài nộp lên Google Drive.",
+        "file": uploaded_file,
+    }
+
+
+def _set_submission_drive_upload_status(
+    submission_id: int,
+    status: str,
+    detail: Optional[str] = None,
+    file_id: Optional[str] = None,
+    file_url: Optional[str] = None,
+    attempts: Optional[int] = None,
+) -> None:
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE exam_submissions
+                SET drive_upload_status = %s,
+                    drive_upload_detail = %s,
+                    drive_file_id = %s,
+                    drive_file_url = %s,
+                    drive_upload_attempts = COALESCE(%s, drive_upload_attempts)
+                WHERE id = %s
+                """,
+                (status, detail, file_id, file_url, attempts, submission_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def process_submission_drive_upload(submission_id: int, attempt: int = 1) -> None:
+    while True:
+        _set_submission_drive_upload_status(
+            submission_id,
+            "uploading",
+            attempts=attempt,
+        )
+        try:
+            result = upload_student_submission(submission_id)
+        except Exception as exc:
+            print(
+                f"[DRIVE UPLOAD] Lỗi không mong đợi cho lượt nộp "
+                f"{submission_id}, lần {attempt}: {exc}"
+            )
+            result = {"status": "failed", "detail": str(exc)}
+
+        if result.get("status") == "uploaded":
+            uploaded_file = result["file"]
+            _set_submission_drive_upload_status(
+                submission_id,
+                "uploaded",
+                file_id=uploaded_file["id"],
+                file_url=uploaded_file["web_view_link"],
+                attempts=attempt,
+            )
+            return
+
+        detail = result.get("detail", "Không thể gửi PDF lên Google Drive.")
+        if attempt >= 3:
+            _set_submission_drive_upload_status(
+                submission_id,
+                "failed",
+                detail=detail,
+                attempts=attempt,
+            )
+            return
+
+        _set_submission_drive_upload_status(
+            submission_id,
+            "uploading",
+            detail=detail,
+            attempts=attempt,
+        )
+        time.sleep(2 ** (attempt - 1))
+        attempt += 1
+
+
+def process_next_submission_drive_upload() -> bool:
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT id, drive_upload_attempts
+                FROM exam_submissions
+                WHERE drive_upload_status = 'pending'
+                ORDER BY id
+                LIMIT 1
+            """)
+            submission = cursor.fetchone()
+            if not submission:
+                return False
+
+            cursor.execute(
+                """
+                UPDATE exam_submissions
+                SET drive_upload_status = 'uploading',
+                    drive_upload_attempts = drive_upload_attempts + 1
+                WHERE id = %s AND drive_upload_status = 'pending'
+                """,
+                (submission["id"],),
+            )
+            claimed = cursor.rowcount == 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    if claimed:
+        process_submission_drive_upload(
+            submission["id"],
+            submission["drive_upload_attempts"] + 1,
+        )
+    return claimed
+
+
+async def submission_drive_upload_worker() -> None:
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            processed = await loop.run_in_executor(
+                None,
+                process_next_submission_drive_upload,
+            )
+            if not processed:
+                await asyncio.sleep(1)
+        except Exception as exc:
+            print(f"[DRIVE UPLOAD] Lỗi xử lý hàng đợi: {exc}")
+            await asyncio.sleep(5)
+
+
+@app.get("/api/student/submissions/{submission_id}/drive-status")
+def get_submission_drive_status(submission_id: int):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT drive_upload_status, drive_upload_detail,
+                       drive_file_id, drive_file_url
+                FROM exam_submissions
+                WHERE id = %s
+                """,
+                (submission_id,),
+            )
+            submission = cursor.fetchone()
+            if not submission:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bài nộp!")
+            return {
+                "status": submission["drive_upload_status"] or "not_requested",
+                "detail": submission["drive_upload_detail"],
+                "file": (
+                    {
+                        "id": submission["drive_file_id"],
+                        "web_view_link": submission["drive_file_url"],
+                    }
+                    if submission["drive_file_id"]
+                    else None
+                ),
+            }
+    finally:
+        conn.close()
+
 
 @app.get("/api/admin/submissions/{submission_id}")
 def get_submission_detail(submission_id: int):
@@ -533,6 +1170,71 @@ def get_submission_detail(submission_id: int):
                 cursor.execute("SELECT * FROM question_options WHERE question_id = %s", (ans["question_id"],))
                 ans["options"] = cursor.fetchall()
 
+            answer_by_question = {ans["question_id"]: ans for ans in answers}
+            review_sections = json.loads(sub["shuffled_data"]) if sub.get("shuffled_data") else []
+            if not review_sections:
+                cursor.execute("""
+                    SELECT id, section_type, title, points
+                    FROM exam_sections
+                    WHERE exam_id = %s
+                    ORDER BY order_index ASC
+                """, (sub["exam_id"],))
+                review_sections = cursor.fetchall()
+                for section in review_sections:
+                    cursor.execute("""
+                        SELECT id, content, points, order_index
+                        FROM questions
+                        WHERE section_id = %s
+                        ORDER BY order_index ASC
+                    """, (section["id"],))
+                    section["questions"] = cursor.fetchall()
+                    for index, question in enumerate(section["questions"], start=1):
+                        question["number"] = index
+                        cursor.execute("""
+                            SELECT id, option_label AS label, content
+                            FROM question_options
+                            WHERE question_id = %s
+                            ORDER BY order_index ASC
+                        """, (question["id"],))
+                        question["options"] = cursor.fetchall()
+
+            for section in review_sections:
+                for question in section.get("questions", []):
+                    answer = answer_by_question.get(question["id"])
+                    cursor.execute("""
+                        SELECT id, is_correct, content
+                        FROM question_options
+                        WHERE question_id = %s
+                    """, (question["id"],))
+                    options_by_id = {option["id"]: option for option in cursor.fetchall()}
+                    question["options"] = [
+                        {
+                            **option,
+                            "is_correct": bool(options_by_id.get(option["id"], {}).get("is_correct")),
+                            "is_selected": bool(
+                                answer and answer.get("selected_option_id") == option["id"]
+                            ),
+                        }
+                        for option in question.get("options", [])
+                    ]
+                    question["student_text_answer"] = answer.get("text_answer") if answer else None
+                    question["awarded_points"] = (
+                        float(answer["awarded_points"] or 0) if answer else 0
+                    )
+                    question["is_correct"] = bool(answer and answer.get("is_correct"))
+                    question["student_tf_answers"] = {}
+                    if section["section_type"] == "g2" and answer and answer.get("text_answer"):
+                        question["student_tf_answers"] = json.loads(answer["text_answer"])
+                    question["correct_short_answer"] = next(
+                        (
+                            option["content"]
+                            for option in question["options"]
+                            if option["is_correct"]
+                        ),
+                        None,
+                    )
+
+            sub["review_sections"] = review_sections
             sub["answers"] = answers
             return {"status": "success", "submission": sub}
     finally:
@@ -540,24 +1242,115 @@ def get_submission_detail(submission_id: int):
 
 # ==================== STUDENT: LÀM BÀI THI ====================
 @app.get("/api/student/exams")
-def get_student_exams():
-    """Lấy danh sách các bài thi đang mở cho học sinh."""
+def get_student_exams(student_id: int):
+    """Lấy danh sách bài thi kèm trạng thái mới nhất của học sinh."""
+    allow_multiple_attempts = os.getenv(
+        "ALLOW_MULTIPLE_EXAM_ATTEMPTS", ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
     conn = get_db()
     try:
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT e.*, 
-                       COUNT(DISTINCT s.id) as section_count,
-                       COUNT(DISTINCT q.id) as question_count
-                FROM exams e
-                LEFT JOIN exam_sections s ON s.exam_id = e.id
-                LEFT JOIN questions q ON q.section_id = s.id
-                WHERE e.is_published = 1
-                GROUP BY e.id
+                SELECT e.*,
+                       COALESCE(question_counts.section_count, 0) as section_count,
+                       COALESCE(question_counts.question_count, 0) as question_count,
+                       sub.id as submission_id,
+                       sub.status as student_status,
+                       sub.score as student_score,
+                       sub.submitted_at as student_submitted_at
+                FROM users student
+                JOIN exams e ON e.class_id IS NULL OR e.class_id = student.class_id
+                LEFT JOIN (
+                    SELECT s.exam_id,
+                           COUNT(DISTINCT s.id) as section_count,
+                           COUNT(DISTINCT q.id) as question_count
+                    FROM exam_sections s
+                    LEFT JOIN questions q ON q.section_id = s.id
+                    GROUP BY s.exam_id
+                ) question_counts ON question_counts.exam_id = e.id
+                LEFT JOIN exam_submissions sub ON sub.id = (
+                    SELECT MAX(latest.id)
+                    FROM exam_submissions latest
+                    WHERE latest.exam_id = e.id AND latest.student_id = student.id
+                )
+                WHERE student.id = %s AND student.role = 'student'
+                  AND student.is_active = 1 AND e.is_published = 1
                 ORDER BY e.id DESC
-            """)
+            """, (student_id,))
             exams = cursor.fetchall()
-            return {"status": "success", "exams": exams}
+            return {
+                "status": "success",
+                "exams": exams,
+                "allow_multiple_attempts": allow_multiple_attempts,
+            }
+    finally:
+        conn.close()
+
+@app.get("/api/student/submissions/{submission_id}/review")
+def get_student_submission_review(submission_id: int, student_id: int):
+    """Return a student's submitted questions without exposing their answers."""
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT sub.id, sub.student_id, sub.status, sub.score,
+                       sub.shuffled_data, e.title as exam_title, e.total_score
+                FROM exam_submissions sub
+                JOIN exams e ON e.id = sub.exam_id
+                WHERE sub.id = %s AND sub.student_id = %s
+            """, (submission_id, student_id))
+            submission = cursor.fetchone()
+            if not submission:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bài làm!")
+            if submission["status"] not in ["submitted", "graded", "timed_out"]:
+                raise HTTPException(status_code=409, detail="Bài thi chưa được nộp.")
+
+            sections = json.loads(submission["shuffled_data"] or "[]")
+            cursor.execute("""
+                SELECT question_id, is_correct, awarded_points
+                FROM student_answers
+                WHERE submission_id = %s
+            """, (submission_id,))
+            question_results = {
+                answer["question_id"]: answer for answer in cursor.fetchall()
+            }
+
+            review_sections = []
+            for section in sections:
+                review_questions = []
+                for question in section.get("questions", []):
+                    result = question_results.get(question["id"])
+                    review_questions.append({
+                        "number": question["number"],
+                        "content": question["content"],
+                        "options": (
+                            [
+                                {"label": option.get("label"), "content": option["content"]}
+                                for option in question.get("options", [])
+                            ]
+                            if section["section_type"] != "g3"
+                            else []
+                        ),
+                        "earned_points": (
+                            float(result["awarded_points"] or 0)
+                            if result
+                            else 0.0
+                        ),
+                        "possible_points": float(question.get("points") or 0),
+                    })
+                review_sections.append({
+                    "section_type": section["section_type"],
+                    "title": section["title"],
+                    "questions": review_questions,
+                })
+
+            return {
+                "status": "success",
+                "exam_title": submission["exam_title"],
+                "score": submission["score"],
+                "total_score": submission["total_score"],
+                "sections": review_sections,
+            }
     finally:
         conn.close()
 
@@ -574,6 +1367,25 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
     conn = get_db()
     try:
         with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT class_id FROM users WHERE id = %s AND role = 'student' AND is_active = 1",
+                (student_id,),
+            )
+            student = cursor.fetchone()
+            if not student:
+                raise HTTPException(status_code=403, detail="Tài khoản học sinh không hợp lệ.")
+
+            cursor.execute("SELECT class_id FROM exams WHERE id = %s", (exam_id,))
+            exam_access = cursor.fetchone()
+            if not exam_access:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bài thi!")
+            if exam_access["class_id"] is not None and exam_access["class_id"] != student["class_id"]:
+                raise HTTPException(status_code=403, detail="Bài thi này không dành cho lớp của bạn.")
+
+            allow_multiple_attempts = os.getenv(
+                "ALLOW_MULTIPLE_EXAM_ATTEMPTS", ""
+            ).strip().lower() in {"1", "true", "yes", "on"}
+
             # 1. Kiểm tra xem học sinh đã có bài làm chưa
             cursor.execute("""
                 SELECT * FROM exam_submissions 
@@ -582,11 +1394,14 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
             """, (exam_id, student_id))
             existing_sub = cursor.fetchone()
 
-            # Nếu đã nộp bài rồi -> Không cho làm lại
-            if existing_sub and existing_sub["status"] in ["submitted", "graded"]:
+            if (
+                not allow_multiple_attempts
+                and existing_sub
+                and existing_sub["status"] in ["submitted", "graded", "timed_out"]
+            ):
                 return {
                     "status": "already_submitted",
-                    "message": "Bạn đã nộp bài kiểm tra này rồi!",
+                    "message": "Bạn đã làm bài kiểm tra này rồi!",
                     "submission_id": existing_sub["id"],
                     "score": existing_sub["score"]
                 }
@@ -600,7 +1415,39 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
             # Nếu đang làm dở (in_progress) -> Khôi phục đề đã sinh và các câu đã chọn
             if existing_sub and existing_sub["status"] == "in_progress":
                 shuffled_data = json.loads(existing_sub["shuffled_data"])
-                
+                cursor.execute(
+                    "SELECT id, section_type FROM exam_sections WHERE exam_id = %s",
+                    (exam_id,),
+                )
+                section_types_by_id = {
+                    section["id"]: section["section_type"]
+                    for section in cursor.fetchall()
+                }
+                section_types_changed = False
+                for section in shuffled_data:
+                    section_type = section_types_by_id.get(section["id"])
+                    if not section_type or section.get("section_type") == section_type:
+                        continue
+
+                    section["section_type"] = section_type
+                    section_types_changed = True
+                    labels = (
+                        ["a", "b", "c", "d", "e"]
+                        if section_type in ["g2", "g4"]
+                        else ["A", "B", "C", "D", "E", "F"]
+                    )
+                    for question in section.get("questions", []):
+                        for index, option in enumerate(question.get("options", [])):
+                            if index < len(labels):
+                                option["label"] = labels[index]
+
+                if section_types_changed:
+                    cursor.execute(
+                        "UPDATE exam_submissions SET shuffled_data = %s WHERE id = %s",
+                        (json.dumps(shuffled_data, ensure_ascii=False), existing_sub["id"]),
+                    )
+                    conn.commit()
+
                 # Lấy các đáp án đã lưu trước đó
                 cursor.execute("""
                     SELECT question_id, selected_option_id, text_answer 
@@ -626,11 +1473,15 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
             flat_question_index = 1
 
             for sec in sections:
+                section_type = sec["section_type"]
+                shuffle_questions = sec["shuffle_questions"]
+                shuffle_options = sec["shuffle_options"]
+
                 cursor.execute("SELECT * FROM questions WHERE section_id = %s ORDER BY order_index ASC", (sec['id'],))
                 questions = cursor.fetchall()
 
                 # Quy tắc trộn câu hỏi
-                if sec["shuffle_questions"] == 1:
+                if shuffle_questions == 1:
                     random.shuffle(questions)
 
                 shuffled_questions = []
@@ -639,11 +1490,11 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
                     options = cursor.fetchall()
 
                     # Quy tắc trộn phương án
-                    if sec["shuffle_options"] == 1 and len(options) > 1:
+                    if shuffle_options == 1 and len(options) > 1:
                         random.shuffle(options)
 
                     # Gán nhãn A, B, C, D (hoặc a, b, c, d) hiển thị tuần tự cho học sinh
-                    display_labels = ['A', 'B', 'C', 'D', 'E', 'F'] if sec["section_type"] != 'g2' else ['a', 'b', 'c', 'd', 'e']
+                    display_labels = ['a', 'b', 'c', 'd', 'e'] if section_type in ['g2', 'g4'] else ['A', 'B', 'C', 'D', 'E', 'F']
                     safe_options = []
                     for idx, opt in enumerate(options):
                         lbl = display_labels[idx] if idx < len(display_labels) else opt["option_label"]
@@ -665,7 +1516,7 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
 
                 shuffled_sections.append({
                     "id": sec["id"],
-                    "section_type": sec["section_type"],
+                    "section_type": section_type,
                     "title": sec["title"],
                     "points": float(sec["points"]),
                     "questions": shuffled_questions
@@ -691,6 +1542,9 @@ def start_exam(exam_id: int, student_id: int = Form(...)):
                 "shuffled_exam": shuffled_sections,
                 "saved_answers": []
             }
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -752,11 +1606,44 @@ def submit_exam(submission_id: int):
             if not sub:
                 raise HTTPException(status_code=404, detail="Không tìm thấy bài nộp!")
             if sub["status"] in ["submitted", "graded"]:
-                return {"status": "success", "message": "Bài thi đã được nộp trước đó!", "score": sub["score"]}
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT q.id) AS total_questions,
+                           COUNT(DISTINCT CASE WHEN sa.is_correct = 1 THEN q.id END)
+                               AS correct_questions
+                    FROM exam_sections s
+                    JOIN questions q ON q.section_id = s.id
+                    LEFT JOIN student_answers sa
+                        ON sa.question_id = q.id AND sa.submission_id = %s
+                    WHERE s.exam_id = %s
+                    """,
+                    (submission_id, sub["exam_id"]),
+                )
+                result_counts = cursor.fetchone() or {}
+                return {
+                    "status": "already_submitted",
+                    "message": "Bài thi đã được nộp trước đó; không gửi lại PDF.",
+                    "score": sub["score"],
+                    "correct_questions": result_counts.get("correct_questions", 0),
+                    "total_questions": result_counts.get("total_questions", 0),
+                    "drive_upload": (
+                        {
+                            "status": sub["drive_upload_status"],
+                            "detail": sub["drive_upload_detail"],
+                            "file": {
+                                "id": sub["drive_file_id"],
+                                "web_view_link": sub["drive_file_url"],
+                            } if sub["drive_file_id"] else None,
+                        }
+                        if sub.get("drive_upload_status")
+                        else None
+                    ),
+                }
 
             # Lấy tất cả câu hỏi của đề thi cùng thông tin section
             cursor.execute("""
-                SELECT q.id as question_id, q.points as question_points, s.section_type
+                SELECT q.id as question_id, q.points as question_points,
+                       s.section_type, s.title as section_title
                 FROM questions q
                 JOIN exam_sections s ON q.section_id = s.id
                 WHERE s.exam_id = %s
@@ -766,9 +1653,24 @@ def submit_exam(submission_id: int):
             # Lấy tất cả câu trả lời của học sinh
             cursor.execute("SELECT * FROM student_answers WHERE submission_id = %s", (submission_id,))
             student_answers_map = {a["question_id"]: a for a in cursor.fetchall()}
+            question_ids = [question["question_id"] for question in questions]
+            options_by_question = {}
+            if question_ids:
+                placeholders = ", ".join(["%s"] * len(question_ids))
+                cursor.execute(
+                    f"""
+                    SELECT question_id, id, is_correct, content
+                    FROM question_options
+                    WHERE question_id IN ({placeholders})
+                    """,
+                    tuple(question_ids),
+                )
+                for option in cursor.fetchall():
+                    options_by_question.setdefault(option["question_id"], []).append(option)
 
             total_earned_score = 0.0
             correct_questions_count = 0
+            answer_scores = []
 
             for q in questions:
                 qid = q["question_id"]
@@ -779,9 +1681,7 @@ def submit_exam(submission_id: int):
                 awarded = 0.0
                 is_correct = 0
 
-                # Lấy options gốc và cờ is_correct từ DB
-                cursor.execute("SELECT * FROM question_options WHERE question_id = %s", (qid,))
-                options = cursor.fetchall()
+                options = options_by_question.get(qid, [])
 
                 # --- 1. CHẤM PHẦN I (g1): Trắc nghiệm 1 đáp án ---
                 if sec_type == 'g1':
@@ -856,18 +1756,29 @@ def submit_exam(submission_id: int):
 
                 # Cập nhật điểm cho câu này trong bảng student_answers
                 if stu_ans:
-                    cursor.execute("""
-                        UPDATE student_answers 
-                        SET is_correct = %s, awarded_points = %s 
-                        WHERE id = %s
-                    """, (is_correct, awarded, stu_ans["id"]))
+                    answer_scores.append((is_correct, awarded, stu_ans["id"]))
+
+            if answer_scores:
+                cursor.executemany(
+                    """
+                    UPDATE student_answers
+                    SET is_correct = %s, awarded_points = %s
+                    WHERE id = %s
+                    """,
+                    answer_scores,
+                )
 
             # Cập nhật trạng thái bài nộp
             total_earned_score = round(total_earned_score, 2)
             now = datetime.datetime.now()
             cursor.execute("""
                 UPDATE exam_submissions
-                SET status = 'graded', score = %s, submitted_at = %s
+                SET status = 'graded', score = %s, submitted_at = %s,
+                    drive_upload_status = 'pending',
+                    drive_upload_detail = NULL,
+                    drive_file_id = NULL,
+                    drive_file_url = NULL,
+                    drive_upload_attempts = 0
                 WHERE id = %s
             """, (total_earned_score, now, submission_id))
 
@@ -878,7 +1789,8 @@ def submit_exam(submission_id: int):
                 "message": "Nộp bài thành công!",
                 "score": total_earned_score,
                 "correct_questions": correct_questions_count,
-                "total_questions": len(questions)
+                "total_questions": len(questions),
+                "drive_upload": {"status": "pending"},
             }
     except Exception as e:
         conn.rollback()
@@ -898,3 +1810,11 @@ def serve_admin():
 @app.get("/exam")
 def serve_exam():
     return FileResponse(os.path.join(STATIC_DIR, "exam.html"))
+
+@app.get("/service-worker.js")
+def serve_service_worker():
+    return FileResponse(
+        os.path.join(STATIC_DIR, "service-worker.js"),
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )

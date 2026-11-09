@@ -6,15 +6,28 @@
   <title>Trang Quản Trị Khảo Thí - PisQ</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      startup: { typeset: false },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
   <!-- Header -->
   <header class="admin-navbar">
     <div style="display: flex; align-items: center; gap: 14px;">
-      <i class="fa-solid fa-graduation-cap" style="font-size: 26px; color: #38bdf8;"></i>
+      <img class="school-logo" src="/static/images/logo_school.png" alt="Logo Trường Quốc tế Hòa Bình" width="112" height="44">
       <div>
         <h1 style="font-size: 18px; font-weight: 700; color: #fff;">PisQ ADMIN PORTAL</h1>
-        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase;">Quản lý khảo thí chuẩn GDPT 2018</div>
+        <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase;">DẠY VÀ HỌC VỚI NỀM HẠNH PHÚC</div>
       </div>
     </div>
 
@@ -33,7 +46,6 @@
 
     <div style="display: flex; align-items: center; gap: 14px;">
       <span class="badge badge-amber"><i class="fa-solid fa-user-shield"></i> <span id="adminName">Admin</span></span>
-      <a href="/" class="btn btn-outline btn-sm"><i class="fa-solid fa-eye"></i> Xem Trang Học Sinh</a>
       <button onclick="handleLogout()" class="btn btn-danger btn-sm"><i class="fa-solid fa-arrow-right-from-bracket"></i> Đăng xuất</button>
     </div>
   </header>
@@ -47,10 +59,9 @@
           <h2 style="font-size: 18px; font-weight: 700; color: #fff;">
             <i class="fa-solid fa-cloud-arrow-up" style="color: #38bdf8; margin-right: 8px;"></i> Nạp Đề Thi Từ File Word (.docx)
           </h2>
-          <span style="font-size: 13px; color: var(--text-dim);">Hỗ trợ công thức LaTeX / OMML & ảnh nhúng inline</span>
         </div>
 
-        <form id="uploadDocxForm" onsubmit="handleUploadDocx(event)" style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 16px; align-items: flex-end;">
+        <form id="uploadDocxForm" onsubmit="handleUploadDocx(event)" style="display: grid; grid-template-columns: 2fr 1fr 1.4fr 1fr auto; gap: 16px; align-items: flex-end;">
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label">Tiêu đề bài kiểm tra</label>
             <input type="text" id="examTitleInput" class="form-control" placeholder="Ví dụ: Kiểm tra giữa kỳ 1 Toán 12" required>
@@ -59,6 +70,13 @@
           <div class="form-group" style="margin-bottom: 0;">
             <label class="form-label">Thời gian (Phút)</label>
             <input type="number" id="examDurationInput" class="form-control" value="45" min="5" max="180" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="examClassSelect">Lớp được phép dự thi</label>
+            <select id="examClassSelect" class="form-control" onchange="loadAdminExams()">
+              <option value="all">Tất cả các lớp</option>
+            </select>
           </div>
 
           <div class="form-group" style="margin-bottom: 0;">
@@ -71,10 +89,56 @@
           </button>
         </form>
 
-        <div style="margin-top: 14px; font-size: 13px; color: var(--text-dim); display: flex; gap: 20px;">
-          <span><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Tự động phân chia 4 phần: <code>&lt;#g1&gt;</code>, <code>&lt;#g2&gt;</code>, <code>&lt;#g3&gt;</code>, <code>&lt;#g4&gt;</code></span>
-          <span><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Nhận diện gạch chân (underline) đáp án đúng</span>
-        </div>
+        <details class="question-authoring-guide">
+          <summary>
+            <i class="fa-solid fa-circle-info"></i>
+            Hướng dẫn soạn câu hỏi trong file Word
+          </summary>
+          <div class="question-authoring-guide-content">
+            <p class="question-authoring-intro">
+              Soạn đề bằng Word và lưu dưới dạng <strong>.docx</strong>. Mỗi thẻ <code>&lt;#g1&gt;</code> đến
+              <code>&lt;#g4&gt;</code> xác định loại câu hỏi; tên phần và tiêu đề phía sau chỉ để hiển thị,
+              không làm thay đổi loại câu.
+            </p>
+
+            <div class="question-authoring-types">
+              <section>
+                <h3><code>&lt;#g1&gt;</code> · Trắc nghiệm nhiều lựa chọn</h3>
+                <p>Hệ thống có thể hoán vị thứ tự câu hỏi và các đáp án.</p>
+                <p>Mỗi đáp án đặt trên một dòng riêng, bắt đầu bằng <code>A.</code>, <code>B.</code>, <code>C.</code>, <code>D.</code>. Gạch chân đáp án đúng.</p>
+              </section>
+              <section>
+                <h3><code>&lt;#g2&gt;</code> · Trắc nghiệm đúng / sai</h3>
+                <p>Các ý a, b, c, d thuộc cùng một câu; hệ thống giữ thứ tự câu hỏi và có thể hoán vị các ý.</p>
+                <p>Mỗi ý bắt đầu bằng <code>a)</code>, <code>b)</code>, <code>c)</code>, <code>d)</code>. Gạch chân nội dung ý đúng; ý không gạch chân được hiểu là sai.</p>
+              </section>
+              <section>
+                <h3><code>&lt;#g3&gt;</code> · Trả lời ngắn</h3>
+                <p>Hệ thống có thể hoán vị thứ tự câu hỏi. Ghi đáp án chuẩn trên dòng riêng; bắt buộc có tiền tố <code>DA.</code> hoặc <code>DA:</code>, ví dụ <code>DA. 12</code> hoặc <code>DA: 12</code>.</p>
+              </section>
+              <section>
+                <h3><code>&lt;#g4&gt;</code> · Tự luận / câu có ý nhỏ</h3>
+                <p>Hệ thống giữ nguyên thứ tự câu hỏi và các ý. Viết mỗi ý trên dòng riêng, bắt đầu bằng <code>a)</code>, <code>b)</code>, <code>c)</code>, <code>d)</code>; học sinh sẽ có khung để nhập bài làm.</p>
+              </section>
+            </div>
+
+            <div class="question-authoring-notes">
+              <h3>Lưu ý khi trình bày file Word</h3>
+              <ul>
+                <li>Đề có thể chỉ gồm một số phần, ví dụ <code>&lt;#g1&gt;</code>, <code>&lt;#g2&gt;</code>, <code>&lt;#g4&gt;</code>. Hệ thống chỉ tạo những phần có trong đề và chia điểm theo cấu hình bài thi.</li>
+                <li>Mỗi câu hỏi bắt đầu bằng <code>Câu 1.</code>, <code>Câu 2.</code>, ... hoặc <code>Question 1.</code>, <code>Question 2.</code>, ...; phải có thẻ phần trước câu hỏi.</li>
+                <li>Nhấn Enter để xuống dòng trước khi gõ từng đáp án hoặc ý nhỏ; mỗi đáp án/ý nhỏ nên nằm trên một dòng riêng.</li>
+                <li>Công thức toán và hình ảnh được hỗ trợ. Trong Word, đặt ảnh ở chế độ <strong>In Line with Text</strong> để ảnh đi cùng dòng nội dung khi hoán vị câu hỏi.</li>
+                <li>Thẻ quyết định loại câu hỏi, không phải tên phần. Ví dụ tiêu đề có ghi “Phần III” nhưng đặt thẻ <code>&lt;#g4&gt;</code> thì câu vẫn được xử lý là tự luận.</li>
+              </ul>
+            </div>
+
+            <p class="question-authoring-footer">
+              Hệ thống có trang đăng nhập dành cho học sinh và trang quản trị riêng. Trang học sinh hiển thị các bài thi được mở cho lớp của mình.
+            </p>
+          </div>
+        </details>
+
       </div>
 
       <!-- Danh sách đề thi -->
@@ -94,13 +158,14 @@
               <th>Thời lượng</th>
               <th>Số phần / Câu</th>
               <th>Thang điểm</th>
+              <th>Lớp dự thi</th>
               <th>Lượt làm</th>
               <th>Trạng thái</th>
               <th style="text-align: right;">Thao tác</th>
             </tr>
           </thead>
           <tbody id="examTableBody">
-            <tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Đang tải danh sách bài thi...</td></tr>
+            <tr><td colspan="9" style="text-align: center; color: var(--text-dim);">Đang tải danh sách bài thi...</td></tr>
           </tbody>
         </table>
       </div>
@@ -139,7 +204,12 @@
           </div>
 
           <div class="card-box">
-            <h3 style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 14px;">Danh Sách Lớp</h3>
+            <div class="card-header-bar">
+              <h3 style="font-size: 16px; font-weight: 700; color: #fff;">Danh Sách Lớp</h3>
+              <select id="classListGradeFilter" class="form-control" aria-label="Lọc danh sách lớp theo khối" onchange="renderClassList()" style="width: auto; min-width: 130px; padding: 8px 10px;">
+                <option value="">Tất cả khối</option>
+              </select>
+            </div>
             <div id="classListContainer" style="display: flex; flex-direction: column; gap: 8px;">
               <!-- Danh sách lớp -->
             </div>
@@ -175,10 +245,11 @@
                   <th>Lớp</th>
                   <th>Giới tính</th>
                   <th>Trạng thái</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody id="studentTableBody">
-                <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Vui lòng chọn lớp học...</td></tr>
+                <tr><td colspan="7" style="text-align: center; color: var(--text-dim);">Vui lòng chọn lớp học...</td></tr>
               </tbody>
             </table>
           </div>
@@ -190,7 +261,7 @@
     <div id="tabContentScores" style="display: none;">
       <div class="card-box">
         <div class="card-header-bar">
-          <div style="display: flex; align-items: center; gap: 20px;">
+          <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
             <h2 style="font-size: 18px; font-weight: 700; color: #fff;">
               <i class="fa-solid fa-chart-line" style="color: #38bdf8; margin-right: 8px;"></i> Bảng Điểm Khảo Thí
             </h2>
@@ -203,7 +274,11 @@
               </select>
             </div>
           </div>
-          <button onclick="loadSubmissions()" class="btn btn-outline btn-sm"><i class="fa-solid fa-rotate-right"></i> Tải lại</button>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button onclick="loadSubmissions()" class="btn btn-outline btn-sm">
+              <i class="fa-solid fa-rotate-right"></i> Tải lại
+            </button>
+          </div>
         </div>
 
         <!-- Thống kê nhanh -->
@@ -286,6 +361,9 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button type="button" onclick="closeConfigModal(); openExamQuestionsModal(document.getElementById('cfgExamId').value);" class="btn btn-outline" style="margin-right: auto; color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">
+          <i class="fa-solid fa-list-check"></i> Xem & Sửa câu hỏi
+        </button>
         <button onclick="closeConfigModal()" class="btn btn-outline">Hủy</button>
         <button onclick="saveExamConfig()" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Lưu cấu hình</button>
       </div>
@@ -363,13 +441,201 @@
 
   <!-- MODAL CHI TIẾT BÀI LÀM HỌC SINH -->
   <div id="submissionDetailModal" class="modal-overlay">
-    <div class="modal-dialog" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-dialog submission-review-dialog">
       <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center;">
-        <span><i class="fa-solid fa-file-lines" style="color: #38bdf8; margin-right: 8px;"></i> Chi Tiết Bài Làm</span>
+        <span><i class="fa-solid fa-file-lines" style="color: #38bdf8; margin-right: 8px;"></i> Đối Chiếu Bài Làm</span>
         <button onclick="closeDetailModal()" class="btn btn-outline btn-sm"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body" id="submissionDetailBody">
         Đang tải bài làm...
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL XEM & QUẢN LÝ CÂU HỎI ĐỀ THI ==================== -->
+  <div id="examQuestionsModal" class="modal-overlay">
+    <div class="modal-dialog eq-modal-dialog">
+      <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button onclick="closeExamQuestionsModal()" class="btn btn-outline btn-sm eq-back-button" title="Quay lại danh sách đề thi">
+            <i class="fa-solid fa-arrow-left"></i><span>Quay lại</span>
+          </button>
+          <i class="fa-solid fa-list-check" style="color: #38bdf8; font-size: 20px;"></i>
+          <div>
+            <div style="font-size: 18px; font-weight: 700; color: #fff;">Quản Lý Câu Hỏi & Đáp Án</div>
+            <div style="font-size: 13px; color: var(--text-dim);" id="eqExamTitleSubtitle">Đang tải...</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button onclick="openAddQuestionModal()" class="btn btn-success btn-sm">
+            <i class="fa-solid fa-plus"></i> Thêm câu hỏi mới
+          </button>
+          <button onclick="closeExamQuestionsModal()" class="btn btn-outline btn-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <!-- Thanh công cụ lọc & tìm kiếm -->
+      <div class="eq-filter-toolbar" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="eqFilterPills">
+          <button class="filter-pill active" id="pill-all" onclick="setQuestionFilter('all')">Tất cả (<span id="eqCountAll">0</span>)</button>
+          <button class="filter-pill" id="pill-g1" onclick="setQuestionFilter('g1')">Phần I: Trắc nghiệm (<span id="eqCountG1">0</span>)</button>
+          <button class="filter-pill" id="pill-g2" onclick="setQuestionFilter('g2')">Phần II: Đúng/Sai (<span id="eqCountG2">0</span>)</button>
+          <button class="filter-pill" id="pill-g3" onclick="setQuestionFilter('g3')">Phần III: Trả lời ngắn (<span id="eqCountG3">0</span>)</button>
+          <button class="filter-pill" id="pill-g4" onclick="setQuestionFilter('g4')">Phần IV: Tự luận (<span id="eqCountG4">0</span>)</button>
+        </div>
+        <div style="position: relative; width: 260px;">
+          <input type="text" id="eqSearchInput" class="form-control" placeholder="Tìm kiếm nội dung..." oninput="handleQuestionSearch()" style="padding-left: 34px; height: 38px; font-size: 13px;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 12px; color: var(--text-dim); font-size: 13px;"></i>
+        </div>
+      </div>
+
+      <!-- Danh sách câu hỏi cuộn dọc -->
+      <div class="eq-workspace">
+        <aside id="eqQuestionNavigator" class="eq-question-navigator" aria-label="Điều hướng câu hỏi">
+          <div class="eq-navigator-heading">ĐIỀU HƯỚNG CÂU HỎI</div>
+          <div class="eq-navigator-content">Đang tải...</div>
+        </aside>
+        <div id="eqQuestionsContainer" class="eq-questions-container">
+          <div style="text-align: center; color: var(--text-dim); padding: 40px 0;">Đang nạp danh sách câu hỏi...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL ĐIỀU CHỈNH CÂU HỎI VÀ ĐÁP ÁN ==================== -->
+  <div id="editQuestionModal" class="modal-overlay" style="z-index: 1050;">
+    <div class="modal-dialog" style="max-width: 850px; width: 92%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+        <div>
+          <i class="fa-solid fa-pen-to-square" style="color: #38bdf8; margin-right: 8px;"></i>
+          <span>Điều Chỉnh Nội Dung Câu Hỏi & Đáp Án</span>
+        </div>
+        <button onclick="closeEditQuestionModal()" class="btn btn-outline btn-sm"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal-body" style="margin-bottom: 0;">
+        <input type="hidden" id="edQuestionId">
+        <input type="hidden" id="edSectionType">
+
+        <!-- Thông tin phần thi và điểm -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 14px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Phần thi / Nhóm</label>
+            <input type="text" id="edSectionTitle" class="form-control" readonly style="background: #0f172a; color: #94a3b8;">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Điểm số của câu</label>
+            <input type="number" id="edPoints" class="form-control" step="0.05" min="0" max="10" required>
+          </div>
+        </div>
+
+        <!-- Nội dung câu hỏi -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Nội dung câu hỏi</label>
+            <span style="font-size: 12px; color: var(--text-dim);">Hỗ trợ công thức LaTeX: <code>$công_thức$</code> và HTML</span>
+          </div>
+          <textarea id="edContent" class="form-control" rows="4" style="font-family: inherit; font-size: 14px; line-height: 1.5;" oninput="updateEditMathPreview()"></textarea>
+          
+          <div style="margin-top: 8px;">
+            <div style="font-size: 12px; color: #38bdf8; font-weight: 600; margin-bottom: 4px;">
+              <i class="fa-solid fa-eye"></i> Xem trước công thức LaTeX trực tiếp:
+            </div>
+            <div id="edMathPreview" class="math-preview-box">Đang cập nhật xem trước...</div>
+          </div>
+        </div>
+
+        <!-- Khu vực điều chỉnh đáp án theo nhóm câu hỏi -->
+        <div class="form-group" style="margin-top: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label" style="margin-bottom: 0; font-size: 14px; color: #fff;">
+              <i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Phương Án & Thiết Lập Đáp Án Đúng
+            </label>
+            <button type="button" id="btnEdAddOption" onclick="addOptionRowInEdit()" class="btn btn-outline btn-sm" style="display: none;">
+              <i class="fa-solid fa-plus"></i> Thêm phương án
+            </button>
+          </div>
+          <div id="edOptionsInstruction" style="font-size: 13px; color: var(--text-dim); margin-bottom: 12px;"></div>
+          
+          <div id="edOptionsContainer">
+            <!-- Dynamic options container -->
+          </div>
+        </div>
+
+        <!-- Lời giải chi tiết -->
+        <div class="form-group" style="margin-top: 18px;">
+          <label class="form-label"><i class="fa-regular fa-lightbulb"></i> Lời giải chi tiết / Hướng dẫn giải (Tùy chọn)</label>
+          <textarea id="edExplanation" class="form-control" rows="2" placeholder="Giải thích vì sao chọn đáp án này, các bước giải mẫu..."></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: 16px;">
+        <button onclick="closeEditQuestionModal()" class="btn btn-outline">Hủy bỏ</button>
+        <button onclick="saveQuestionEdit()" class="btn btn-primary" id="btnSaveQuestionEdit">
+          <i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL THÊM CÂU HỎI MỚI VÀO BÀI THI ==================== -->
+  <div id="addQuestionModal" class="modal-overlay" style="z-index: 1060;">
+    <div class="modal-dialog" style="max-width: 850px; width: 92%; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+        <div>
+          <i class="fa-solid fa-circle-plus" style="color: #10b981; margin-right: 8px;"></i>
+          <span>Thêm Câu Hỏi Mới</span>
+        </div>
+        <button onclick="closeAddQuestionModal()" class="btn btn-outline btn-sm"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal-body" style="margin-bottom: 0;">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 14px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Chọn Phần Thi (Section)</label>
+            <select id="addQSectionSelect" class="form-control" onchange="handleAddSectionChange()" required></select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Điểm số của câu</label>
+            <input type="number" id="addQPoints" class="form-control" step="0.05" value="0.25" min="0" max="10" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Nội dung câu hỏi (hỗ trợ công thức $formula$)</label>
+          <textarea id="addQContent" class="form-control" rows="4" placeholder="Nhập nội dung câu hỏi..." oninput="updateAddMathPreview()"></textarea>
+          <div style="margin-top: 8px;">
+            <div style="font-size: 12px; color: #38bdf8; font-weight: 600; margin-bottom: 4px;">
+              <i class="fa-solid fa-eye"></i> Xem trước trực tiếp:
+            </div>
+            <div id="addQMathPreview" class="math-preview-box">Nội dung xem trước...</div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label" style="margin-bottom: 0; font-size: 14px; color: #fff;">
+              <i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Phương án & Đáp án đúng
+            </label>
+            <button type="button" id="btnAddQOptionBtn" onclick="addOptionRowInAdd()" class="btn btn-outline btn-sm" style="display: none;">
+              <i class="fa-solid fa-plus"></i> Thêm phương án
+            </button>
+          </div>
+          <div id="addQOptionsInstruction" style="font-size: 13px; color: var(--text-dim); margin-bottom: 12px;"></div>
+          <div id="addQOptionsContainer"></div>
+        </div>
+
+        <div class="form-group" style="margin-top: 18px;">
+          <label class="form-label">Lời giải chi tiết (Tùy chọn)</label>
+          <textarea id="addQExplanation" class="form-control" rows="2" placeholder="Giải thích chi tiết đáp án..."></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: 16px;">
+        <button onclick="closeAddQuestionModal()" class="btn btn-outline">Hủy bỏ</button>
+        <button onclick="submitAddQuestion()" class="btn btn-success" id="btnSubmitAddQuestion">
+          <i class="fa-solid fa-plus"></i> Thêm vào đề thi
+        </button>
       </div>
     </div>
   </div>
@@ -412,29 +678,39 @@
     // ==================== QUẢN LÝ ĐỀ THI ====================
     async function loadAdminExams() {
       const tbody = document.getElementById('examTableBody');
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Đang tải...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-dim);">Đang tải...</td></tr>';
       try {
         const res = await fetch('/api/admin/exams');
         const data = await res.json();
-        if (data.exams && data.exams.length > 0) {
-          tbody.innerHTML = data.exams.map(exam => `
+        if (!res.ok) throw new Error(data.detail || 'Không thể tải danh sách bài thi.');
+        const selectedClassId = document.getElementById('examClassSelect').value;
+        const exams = (data.exams || []).filter(exam =>
+          selectedClassId === 'all' ||
+          (selectedClassId !== '' && String(exam.class_id) === selectedClassId)
+        );
+        if (exams.length > 0) {
+          tbody.innerHTML = exams.map(exam => `
             <tr>
               <td><strong>#${exam.id}</strong></td>
               <td><strong style="color: #fff;">${exam.title}</strong></td>
               <td>${exam.duration_minutes} phút</td>
               <td>${exam.section_count} phần (${exam.question_count} câu)</td>
               <td><strong>${parseFloat(exam.total_score).toFixed(1)}đ</strong></td>
+              <td>${exam.class_name ? `Lớp ${escapeHtml(exam.class_name)}` : 'Tất cả các lớp'}</td>
               <td><span class="badge badge-blue">${exam.submission_count} bài</span></td>
               <td>
                 <span class="badge ${exam.is_published ? 'badge-green' : 'badge-gray'}">
                   ${exam.is_published ? 'Đang mở' : 'Đã ẩn'}
                 </span>
               </td>
-              <td style="text-align: right;">
-                <button onclick="openConfigModal(${exam.id})" class="btn btn-outline btn-sm" title="Cấu hình / Chia điểm">
-                  <i class="fa-solid fa-sliders"></i>
+              <td style="text-align: right; white-space: nowrap;">
+                <button onclick="openExamQuestionsModal(${exam.id})" class="btn btn-outline btn-sm" title="Xem & Điều chỉnh câu hỏi, đáp án" style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); margin-right: 4px;">
+                  <i class="fa-solid fa-list-check"></i> Câu hỏi
                 </button>
-                <button onclick="viewExamSubmissions(${exam.id})" class="btn btn-outline btn-sm" title="Xem bảng điểm">
+                <button onclick="openConfigModal(${exam.id})" class="btn btn-outline btn-sm" title="Chỉnh sửa cấu hình / Chia điểm" aria-label="Chỉnh sửa cấu hình / Chia điểm" style="margin-right: 4px;">
+                  <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button onclick="viewExamSubmissions(${exam.id})" class="btn btn-outline btn-sm" title="Xem bảng điểm" style="margin-right: 4px;">
                   <i class="fa-solid fa-chart-column"></i>
                 </button>
                 <button onclick="deleteExam(${exam.id})" class="btn btn-danger btn-sm" title="Xóa đề">
@@ -444,10 +720,13 @@
             </tr>
           `).join('');
         } else {
-          tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-dim);">Chưa có đề thi nào. Hãy nạp file Word ở trên!</td></tr>';
+          const emptyMessage = data.exams && data.exams.length
+            ? 'Không có bài thi cho lớp đã chọn.'
+            : 'Chưa có đề thi nào. Hãy nạp file Word ở trên!';
+          tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-dim);">${emptyMessage}</td></tr>`;
         }
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="8" style="color: #ef4444;">Lỗi tải đề thi: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="color: #ef4444;">Lỗi tải đề thi: ${err.message}</td></tr>`;
       }
     }
 
@@ -455,6 +734,7 @@
       e.preventDefault();
       const title = document.getElementById('examTitleInput').value.trim();
       const duration = document.getElementById('examDurationInput').value;
+      const classId = document.getElementById('examClassSelect').value;
       const fileInput = document.getElementById('examFileInput');
       const btn = document.getElementById('btnUploadDocx');
 
@@ -462,9 +742,9 @@
         alert('Vui lòng chọn file Word .docx!');
         return;
       }
-
       const formData = new FormData();
       formData.append('title', title);
+      if (classId && classId !== 'all') formData.append('class_id', classId);
       formData.append('duration_minutes', duration);
       formData.append('total_score', 10.0);
       formData.append('is_published', 1);
@@ -590,29 +870,27 @@
         const res = await fetch('/api/admin/classes');
         const data = await res.json();
         classesCache = data.classes || [];
-
         // Đổ danh sách lớp
-        const container = document.getElementById('classListContainer');
         const importSelect = document.getElementById('importClassSelect');
         const manualSelect = document.getElementById('manualStudentClassSelect');
         const scoreClassFilter = document.getElementById('scoreClassFilter');
+        const classListGradeFilter = document.getElementById('classListGradeFilter');
 
         importSelect.innerHTML = '';
         manualSelect.innerHTML = '';
         scoreClassFilter.innerHTML = '<option value="">-- Tất cả các lớp --</option>';
+        const selectedGrade = classListGradeFilter.value;
+        const grades = [...new Set(classesCache.map(cls => Number(cls.grade_level)))]
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+        classListGradeFilter.replaceChildren(new Option('Tất cả khối', ''));
+        grades.forEach(grade => {
+          classListGradeFilter.add(new Option(`Khối ${grade}`, String(grade)));
+        });
+        classListGradeFilter.value = grades.includes(Number(selectedGrade)) ? selectedGrade : '';
 
         if (classesCache.length > 0) {
-          container.innerHTML = classesCache.map(c => `
-            <div onclick="selectClass(${c.id}, '${c.name}')" 
-                 id="class-item-${c.id}"
-                 style="background: ${activeClassId === c.id ? '#1e293b' : '#162035'}; border: 1px solid ${activeClassId === c.id ? '#38bdf8' : 'var(--border-color)'}; padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;">
-              <div>
-                <strong style="color: #fff;">Lớp ${c.name}</strong>
-                <div style="font-size: 12px; color: var(--text-dim);">Khối ${c.grade_level} (${c.school_year})</div>
-              </div>
-              <span class="badge badge-blue">${c.student_count} HS</span>
-            </div>
-          `).join('');
+          renderClassList();
 
           classesCache.forEach(c => {
             const opt1 = new Option(`Lớp ${c.name} (Khối ${c.grade_level})`, c.id);
@@ -629,10 +907,61 @@
             loadStudentsByClass(activeClassId);
           }
         } else {
-          container.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">Chưa có lớp học nào.</div>';
+          renderClassList();
         }
       } catch (err) {
         console.error('Lỗi tải danh sách lớp:', err);
+      }
+    }
+
+    function renderClassList() {
+      const container = document.getElementById('classListContainer');
+      const selectedGrade = document.getElementById('classListGradeFilter').value;
+      const visibleClasses = classesCache.filter(cls =>
+        !selectedGrade || String(cls.grade_level) === selectedGrade
+      );
+
+      if (!classesCache.length) {
+        container.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">Chưa có lớp học nào.</div>';
+        return;
+      }
+      if (!visibleClasses.length) {
+        container.innerHTML = '<div style="color: var(--text-dim); padding: 10px;">Khối này chưa có lớp học.</div>';
+        return;
+      }
+
+      container.innerHTML = visibleClasses.map(c => `
+        <div onclick="selectClass(${c.id}, '${c.name}')"
+             id="class-item-${c.id}"
+             style="background: ${activeClassId === c.id ? '#1e293b' : '#162035'}; border: 1px solid ${activeClassId === c.id ? '#38bdf8' : 'var(--border-color)'}; padding: 12px 16px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;">
+          <div>
+            <strong style="color: #fff;">Lớp ${escapeHtml(c.name)}</strong>
+            <div style="font-size: 12px; color: var(--text-dim);">Khối ${escapeHtml(c.grade_level)} (${escapeHtml(c.school_year)})</div>
+          </div>
+          <span class="badge badge-blue">${escapeHtml(c.student_count)} HS</span>
+        </div>
+      `).join('');
+    }
+
+    async function loadExamClassOptions() {
+      const select = document.getElementById('examClassSelect');
+      try {
+        const res = await fetch('/api/admin/classes');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Không thể tải danh sách lớp.');
+        classesCache = data.classes || [];
+        const selectedClassId = select.value || 'all';
+        select.replaceChildren(new Option('Tất cả các lớp', 'all'));
+        classesCache.forEach(cls => {
+          select.add(new Option(`Lớp ${cls.name} (Khối ${cls.grade_level})`, cls.id));
+        });
+        select.value = Array.from(select.options).some(option => option.value === selectedClassId)
+          ? selectedClassId
+          : 'all';
+      } catch (error) {
+        console.error('Lỗi tải lớp cho đề thi:', error);
+      } finally {
+        await loadAdminExams();
       }
     }
 
@@ -653,26 +982,55 @@
 
     async function loadStudentsByClass(classId) {
       const tbody = document.getElementById('studentTableBody');
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Đang tải học sinh...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim);">Đang tải học sinh...</td></tr>';
       try {
         const res = await fetch(`/api/admin/students?class_id=${classId}`);
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Không thể tải danh sách học sinh.');
         if (data.students && data.students.length > 0) {
           tbody.innerHTML = data.students.map(s => `
             <tr>
               <td><strong>#${s.id}</strong></td>
-              <td><code>${s.username}</code></td>
-              <td><strong style="color: #fff;">${s.full_name}</strong></td>
-              <td>${s.class_name ? 'Lớp ' + s.class_name : '-'}</td>
+              <td><code>${escapeHtml(s.username)}</code></td>
+              <td><strong style="color: #fff;">${escapeHtml(s.full_name)}</strong></td>
+              <td>${s.class_name ? 'Lớp ' + escapeHtml(s.class_name) : '-'}</td>
               <td>${s.gender === 'male' ? 'Nam' : (s.gender === 'female' ? 'Nữ' : 'Khác')}</td>
-              <td><span class="badge badge-green">Hoạt động</span></td>
+              <td><span class="badge ${s.is_active ? 'badge-green' : 'badge-gray'}">${s.is_active ? 'Hoạt động' : 'Đã khóa'}</span></td>
+              <td>
+                <button onclick="resetStudentPassword(${s.id}, this.dataset.studentName)" data-student-name="${escapeHtml(s.full_name)}" class="btn btn-outline btn-sm" title="Tạo mật khẩu tạm mới">
+                  <i class="fa-solid fa-key"></i> Reset mật khẩu
+                </button>
+              </td>
             </tr>
           `).join('');
         } else {
-          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">Lớp này chưa có học sinh nào. Hãy thêm thủ công hoặc import Excel!</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim);">Lớp này chưa có học sinh nào. Hãy thêm thủ công hoặc import Excel!</td></tr>';
         }
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="6" style="color: #ef4444;">Lỗi tải học sinh: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="color: #ef4444;">Lỗi tải học sinh: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    async function resetStudentPassword(studentId, studentName) {
+      if (!confirm(`Đặt lại mật khẩu cho học sinh ${studentName}? Mật khẩu hiện tại sẽ không còn dùng được.`)) return;
+      const currentUser = JSON.parse(localStorage.getItem('pisq_user') || '{}');
+      const adminPassword = prompt('Nhập lại mật khẩu quản trị để xác nhận:');
+      if (adminPassword === null) return;
+
+      try {
+        const res = await fetch(`/api/admin/students/${studentId}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            admin_username: currentUser.username,
+            admin_password: adminPassword
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Không thể đặt lại mật khẩu.');
+        alert(`Đã đặt lại mật khẩu cho ${studentName}.\n\nMật khẩu tạm: ${data.temporary_password}\nHãy gửi mật khẩu này cho học sinh và yêu cầu đổi sau khi đăng nhập.`);
+      } catch (err) {
+        alert(`Lỗi đặt lại mật khẩu: ${err.message}`);
       }
     }
 
@@ -872,53 +1230,1103 @@
       }
     }
 
+    let submissionReviewQuestions = [];
+    let submissionReviewIsGraded = false;
+
     async function viewSubmissionDetail(submissionId) {
       const modal = document.getElementById('submissionDetailModal');
       const body = document.getElementById('submissionDetailBody');
       modal.classList.add('active');
+      clearMathJax([body]);
       body.innerHTML = 'Đang tải bài làm...';
 
       try {
         const res = await fetch(`/api/admin/submissions/${submissionId}`);
         const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Không thể tải bài làm.');
         const sub = data.submission;
-
+        const submissionStatusLabels = {
+          in_progress: 'Đang làm bài',
+          submitted: 'Đã nộp bài',
+          graded: 'Đã chấm điểm',
+          timed_out: 'Hết giờ'
+        };
+        submissionReviewIsGraded = ['submitted', 'graded', 'timed_out'].includes(sub.status);
+        submissionReviewQuestions = (sub.review_sections || []).flatMap(section =>
+          (section.questions || []).map(question => ({
+            ...question,
+            section_type: section.section_type,
+            section_title: section.title
+          }))
+        );
         body.innerHTML = `
-          <div style="background: #162035; padding: 16px; border-radius: 10px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;">
-            <div><strong>Thí sinh:</strong> ${sub.full_name} (${sub.username})</div>
-            <div><strong>Lớp:</strong> ${sub.class_name || '-'}</div>
-            <div><strong>Bài thi:</strong> ${sub.exam_title}</div>
-            <div><strong>Thời gian nộp:</strong> ${sub.submitted_at}</div>
-            <div><strong>Điểm đạt:</strong> <span style="font-size: 18px; font-weight: 800; color: #34d399;">${parseFloat(sub.score).toFixed(2)}đ</span></div>
-            <div><strong>Trạng thái:</strong> Hoàn thành</div>
+          <div class="submission-review-summary">
+            <div><strong>Học sinh:</strong> ${escapeHtml(sub.full_name)} <span class="review-muted">(${escapeHtml(sub.username)})</span></div>
+            <div><strong>Lớp:</strong> ${escapeHtml(sub.class_name || '-')}</div>
+            <div><strong>Bài thi:</strong> ${escapeHtml(sub.exam_title)}</div>
+            <div><strong>Thời gian nộp:</strong> ${escapeHtml(sub.submitted_at || '-')}</div>
+            <div><strong>Điểm:</strong> <span class="review-score">${sub.score == null ? '-' : `${parseFloat(sub.score).toFixed(2)}đ`}</span></div>
+            <div><strong>Trạng thái:</strong> ${escapeHtml(submissionStatusLabels[sub.status] || sub.status)}</div>
           </div>
 
-          <h4 style="margin-bottom: 12px; font-size: 15px; color: #fff;">Chi tiết câu trả lời:</h4>
-          <div style="display: flex; flex-direction: column; gap: 14px;">
-            ${sub.answers.map((ans, idx) => `
-              <div style="background: #111827; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                  <span class="badge badge-blue">Câu ${idx + 1} (${ans.section_title})</span>
-                  <span class="badge ${ans.is_correct ? 'badge-green' : 'badge-gray'}">
-                    ${ans.awarded_points} / ${ans.question_points} đ
-                  </span>
-                </div>
-                <div style="font-size: 14.5px; color: #fff; margin-bottom: 10px;">${ans.question_content}</div>
-                <div style="font-size: 13px; color: var(--text-dim);">
-                  ${ans.text_answer ? `<strong>Trả lời:</strong> ${ans.text_answer}` : ''}
-                  ${ans.selected_option_id ? `<strong>Phương án chọn ID:</strong> ${ans.selected_option_id}` : ''}
-                </div>
-              </div>
-            `).join('')}
-          </div>
+          <div id="submissionReviewQuestionList" class="submission-review-question-list"></div>
         `;
+        if (!submissionReviewQuestions.length) {
+          document.getElementById('submissionReviewQuestionList').innerHTML =
+            '<div class="review-empty">Bài thi này chưa có câu hỏi để đối chiếu.</div>';
+          return;
+        }
+        renderSubmissionReviewQuestions();
       } catch (err) {
         body.innerHTML = `<div style="color: #ef4444;">Lỗi tải bài làm: ${err.message}</div>`;
       }
     }
 
+    function submissionQuestionAnswered(question) {
+      if (question.section_type === 'g1') return question.options.some(option => option.is_selected);
+      if (question.section_type === 'g2') return Object.keys(question.student_tf_answers || {}).length > 0;
+      return Boolean(question.student_text_answer && question.student_text_answer.trim());
+    }
+
+    function submissionQuestionState(question) {
+      if (!submissionQuestionAnswered(question)) return 'unanswered';
+      if (question.section_type === 'g4') return 'ungraded';
+      if (!submissionReviewIsGraded) return 'pending';
+      if (question.is_correct) return 'correct';
+      if (Number(question.awarded_points || 0) > 0) return 'partial';
+      return 'incorrect';
+    }
+
+    function renderSubmissionReviewQuestions() {
+      const container = document.getElementById('submissionReviewQuestionList');
+      clearMathJax([container]);
+      container.innerHTML = submissionReviewQuestions.map((question, index) => {
+
+      const state = submissionQuestionState(question);
+      const earned = Number(question.awarded_points || 0);
+      const maxPoints = Number(question.points || 0);
+      const statusLabels = {
+        correct: ['badge-green', 'Đúng'],
+        partial: ['badge-blue', 'Đúng một phần'],
+        incorrect: ['badge-red', 'Sai'],
+        unanswered: ['badge-gray', 'Chưa trả lời'],
+        ungraded: ['badge-blue', 'Chờ chấm tự luận'],
+        pending: ['badge-blue', 'Chưa chấm']
+      };
+      const [statusClass, statusLabel] = statusLabels[state];
+      const status = `<span class="badge ${statusClass}">${statusLabel}</span>`;
+      const pointsText = submissionReviewIsGraded
+        ? `${earned.toFixed(2)} / ${maxPoints.toFixed(2)} điểm`
+        : `Chưa chấm / ${maxPoints.toFixed(2)} điểm`;
+
+      let response = '';
+      if (question.section_type === 'g1') {
+        response = `<div class="options-list review-options-list">${question.options.map(option => {
+          const marks = [
+            option.is_correct ? '<span class="review-answer-tag system">Đáp án hệ thống</span>' : '',
+            option.is_selected ? '<span class="review-answer-tag student">Học sinh chọn</span>' : ''
+          ].filter(Boolean).join('');
+          return `
+            <div class="option-card review-option-card ${option.is_correct ? 'review-correct-option' : ''} ${option.is_selected ? (option.is_correct ? 'review-selected-correct' : 'review-selected-wrong') : ''}">
+              <span class="option-letter">${escapeHtml(option.label || '')}</span>
+              <span class="option-text">${renderSafeQuestionContent(option.content)}</span>
+              <span class="review-answer-tags">${marks}</span>
+            </div>
+          `;
+        }).join('')}</div>`;
+      } else if (question.section_type === 'g2') {
+        response = `
+          <div class="review-tf-list">${question.options.map(option => {
+            const studentChoice = (question.student_tf_answers || {})[String(option.id)];
+            const expected = option.is_correct ? 'true' : 'false';
+            return `
+              <div class="review-tf-row">
+                <div class="review-tf-statement"><strong>${escapeHtml(option.label || '')})</strong> ${renderSafeQuestionContent(option.content)}</div>
+                <div class="review-tf-comparison">
+                  <span class="review-answer-tag system">Đáp án: ${expected === 'true' ? 'Đúng' : 'Sai'}</span>
+                  <span class="review-answer-tag ${studentChoice === expected ? 'student-correct' : 'student'}">Học sinh: ${studentChoice === 'true' ? 'Đúng' : studentChoice === 'false' ? 'Sai' : 'Chưa chọn'}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}</div>`;
+      } else {
+        const studentText = question.student_text_answer;
+        response = `
+          <div class="review-text-comparison">
+            <div><strong>Đáp án hệ thống</strong><div class="review-answer-content">${question.section_type === 'g3' ? renderSafeQuestionContent(question.correct_short_answer || 'Chưa cấu hình đáp án') : 'Chấm tự luận thủ công'}</div></div>
+            <div><strong>Học sinh trả lời</strong><div class="review-answer-content ${studentText ? '' : 'review-unanswered-text'}">${studentText ? escapeHtml(studentText) : 'Chưa trả lời'}</div></div>
+          </div>
+        `;
+      }
+
+      return `
+        <article class="question-card-container review-question-card">
+        <div class="question-meta-bar">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <span class="question-num-pill">Câu ${escapeHtml(question.number || index + 1)}</span>
+            <span class="question-section-label">${escapeHtml(question.section_title || '')}</span>
+          </div>
+          <div class="question-meta-status">${status}<span class="question-points">${pointsText}</span></div>
+        </div>
+        <div class="question-content-box">${renderSafeQuestionContent(question.content)}</div>
+        <div class="review-response-label">ĐÁP ÁN HỆ THỐNG VÀ CÂU TRẢ LỜI CỦA HỌC SINH</div>
+        ${response}
+        </article>
+      `;
+      }).join('');
+      normalizeInlineEquationImages(container);
+      renderMathJax(container);
+    }
+
     function closeDetailModal() {
+      clearMathJax([document.getElementById('submissionDetailBody')]);
       document.getElementById('submissionDetailModal').classList.remove('active');
+    }
+
+    // ==================== QUẢN LÝ CÂU HỎI & ĐÁP ÁN (GDPT 2018) ====================
+    let currentExamQuestionsData = null;
+    let currentQuestionFilter = 'all';
+    let currentQuestionSearchQuery = '';
+
+    function clearMathJax(elements) {
+      if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
+        window.MathJax.typesetClear(elements);
+      }
+    }
+
+    function renderMathJax(el) {
+      const mathJax = window.MathJax;
+      if (!mathJax || !mathJax.startup || !mathJax.startup.promise || !el) return;
+
+      normalizeInlineMathDelimiters(el);
+      mathJax.startup.promise
+        .then(() => mathJax.typesetPromise([el]))
+        .catch(error => console.warn('MathJax render warning:', error));
+    }
+
+    function normalizeInlineMathDelimiters(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+      textNodes.forEach(node => {
+        const text = node.nodeValue;
+        node.nodeValue = text.replace(/\$\$([\s\S]+?)\$\$/g, (formula, latex, offset) => {
+          const before = text.slice(0, offset);
+          const after = text.slice(offset + formula.length);
+          return before.trim() || after.trim() ? `$${latex}$` : formula;
+        });
+      });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function renderSafeQuestionContent(value) {
+      const allowedTags = new Set(['strong', 'b', 'em', 'i', 'u', 'sup', 'sub']);
+      const images = [];
+      const getImageStyle = imageTag => {
+        const styleMatch = imageTag.match(/\bstyle=["']([^"']*)["']/i);
+        if (!styleMatch) return '';
+        const dimensions = [];
+        for (const dimension of ['width', 'height']) {
+          const match = styleMatch[1].match(new RegExp(`(?:^|;)\\s*${dimension}\\s*:\\s*(\\d+(?:\\.\\d+)?)(pt|px|in|cm|mm)\\b`, 'i'));
+          if (match && Number(match[1]) > 0 && Number(match[1]) <= 1200) {
+            dimensions.push(`${dimension}:${match[1]}${match[2].toLowerCase()}`);
+          }
+        }
+        return dimensions.join(';');
+      };
+      const sourceContent = String(value || '').replace(/<div class=["']exam-img-box["']>\s*<img\b[^>]*>\s*<\/div>/gi, imageBlock => {
+        const srcMatch = imageBlock.match(/\bsrc\s*=\s*["'](\/static\/uploads\/[a-zA-Z0-9._-]+)["']/i);
+        if (!srcMatch) return '';
+        const imageTagMatch = imageBlock.match(/<img\b[^>]*>/i);
+        const imageTag = imageTagMatch ? imageTagMatch[0] : '';
+        const inlineMath = /\bclass=["'][^"']*\binline-math-img\b/i.test(imageTag);
+        const imageIndex = images.push({ src: srcMatch[1], inlineMath, style: getImageStyle(imageTag) }) - 1;
+        return `\u0000PISQ_IMAGE_${imageIndex}\u0000`;
+      }).replace(/<img\b[^>]*>/gi, imageTag => {
+        const srcMatch = imageTag.match(/\bsrc\s*=\s*["'](\/static\/uploads\/[a-zA-Z0-9._-]+)["']/i);
+        if (!srcMatch) return '';
+        const imageIndex = images.push({ src: srcMatch[1], inlineMath: true, style: getImageStyle(imageTag) }) - 1;
+        return `\u0000PISQ_IMAGE_${imageIndex}\u0000`;
+      });
+
+      return sourceContent.replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (source, rawTagName) => {
+        const tagName = rawTagName.toLowerCase();
+        const closing = /^<\s*\//.test(source);
+
+        if (tagName === 'br') return '<br>';
+        if (!allowedTags.has(tagName)) return escapeHtml(source);
+        return closing ? `</${tagName}>` : `<${tagName}>`;
+      }).replace(/\u0000PISQ_IMAGE_(\d+)\u0000/g, (_token, index) => {
+        const image = images[Number(index)];
+        if (image.inlineMath) {
+          const styleAttribute = image.style ? ` style="${escapeHtml(image.style)}"` : '';
+          return `<img src="${escapeHtml(image.src)}" class="inline-math-img"${styleAttribute} alt="Công thức toán học">`;
+        }
+        return `<div class="exam-img-box"><img src="${escapeHtml(image.src)}" class="exam-img" alt="Hình ảnh câu hỏi"></div>`;
+      });
+    }
+
+    async function openExamQuestionsModal(examId) {
+      const modal = document.getElementById('examQuestionsModal');
+      const container = document.getElementById('eqQuestionsContainer');
+      const subtitle = document.getElementById('eqExamTitleSubtitle');
+      
+      modal.classList.add('active');
+      container.innerHTML = '<div style="text-align: center; color: var(--text-dim); padding: 40px 0;"><i class="fa-solid fa-spinner fa-spin"></i> Đang nạp danh sách câu hỏi...</div>';
+      
+      try {
+        const res = await fetch(`/api/admin/exams/${examId}/questions`);
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi: ' + (data.detail || 'Không thể tải câu hỏi'));
+          closeExamQuestionsModal();
+          return;
+        }
+
+        currentExamQuestionsData = data.exam;
+        subtitle.innerHTML = `<strong style="color: #38bdf8;">${currentExamQuestionsData.title}</strong> &bull; ${currentExamQuestionsData.total_questions} câu hỏi &bull; Thang điểm ${parseFloat(currentExamQuestionsData.total_score).toFixed(1)}đ`;
+
+        // Cập nhật số lượng câu trên các pill lọc
+        updateQuestionFilterCounts();
+
+        // Reset bộ lọc
+        setQuestionFilter('all', false);
+        document.getElementById('eqSearchInput').value = '';
+        currentQuestionSearchQuery = '';
+
+        renderExamQuestionsList();
+      } catch (err) {
+        container.innerHTML = `<div style="color: #ef4444; padding: 20px;">Lỗi tải câu hỏi: ${err.message}</div>`;
+      }
+    }
+
+    function closeExamQuestionsModal() {
+      document.getElementById('examQuestionsModal').classList.remove('active');
+    }
+
+    function updateQuestionFilterCounts() {
+      if (!currentExamQuestionsData || !currentExamQuestionsData.sections) return;
+      let countAll = 0, countG1 = 0, countG2 = 0, countG3 = 0, countG4 = 0;
+      currentExamQuestionsData.sections.forEach(sec => {
+        const qCount = sec.questions ? sec.questions.length : 0;
+        countAll += qCount;
+        if (sec.section_type === 'g1') countG1 += qCount;
+        else if (sec.section_type === 'g2') countG2 += qCount;
+        else if (sec.section_type === 'g3') countG3 += qCount;
+        else if (sec.section_type === 'g4') countG4 += qCount;
+      });
+      document.getElementById('eqCountAll').textContent = countAll;
+      document.getElementById('eqCountG1').textContent = countG1;
+      document.getElementById('eqCountG2').textContent = countG2;
+      document.getElementById('eqCountG3').textContent = countG3;
+      document.getElementById('eqCountG4').textContent = countG4;
+    }
+
+    function setQuestionFilter(filterType, shouldRender = true) {
+      currentQuestionFilter = filterType;
+      ['all', 'g1', 'g2', 'g3', 'g4'].forEach(t => {
+        const pill = document.getElementById(`pill-${t}`);
+        if (pill) pill.classList.toggle('active', t === filterType);
+      });
+      if (shouldRender) renderExamQuestionsList();
+    }
+
+    function handleQuestionSearch() {
+      currentQuestionSearchQuery = document.getElementById('eqSearchInput').value.trim().toLowerCase();
+      renderExamQuestionsList();
+    }
+
+    function renderQuestionNavigator(questions) {
+      const navigatorContent = document.querySelector('#eqQuestionNavigator .eq-navigator-content');
+      if (!navigatorContent) return;
+      if (questions.length === 0) {
+        navigatorContent.innerHTML = '<div class="eq-navigator-empty">Không có câu hỏi phù hợp.</div>';
+        return;
+      }
+
+      const groups = [];
+      questions.forEach(question => {
+        let group = groups.find(item => item.section_type === question.section_type);
+        if (!group) {
+          group = {
+            section_type: question.section_type,
+            section_title: question.section_title,
+            questions: []
+          };
+          groups.push(group);
+        }
+        group.questions.push(question);
+      });
+
+      navigatorContent.innerHTML = groups.map(group => `
+        <section class="eq-nav-section">
+          <button type="button" class="eq-nav-section-title" onclick="setQuestionFilter('${group.section_type}')"
+                  title="${escapeHtml(group.section_title)}">
+            <span>&lt;#${group.section_type}&gt;</span>
+            <span>${group.questions.length}</span>
+          </button>
+          <div class="eq-nav-question-grid">
+            ${group.questions.map(question => `
+              <button type="button" class="eq-nav-question" data-question-id="${question.id}"
+                      onclick="jumpToManagedQuestion(${question.id})" title="Đi tới Câu ${question.globalNumber}">
+                ${question.globalNumber}
+              </button>
+            `).join('')}
+          </div>
+        </section>
+      `).join('');
+      const firstQuestion = navigatorContent.querySelector('.eq-nav-question');
+      if (firstQuestion) firstQuestion.classList.add('active');
+    }
+
+    function jumpToManagedQuestion(questionId) {
+      const card = document.getElementById(`qcard-${questionId}`);
+      if (!card) return;
+      const container = document.getElementById('eqQuestionsContainer');
+      container.scrollTo({ top: card.offsetTop - 8, behavior: 'smooth' });
+      document.querySelectorAll('.eq-nav-question').forEach(button => {
+        button.classList.toggle('active', Number(button.dataset.questionId) === questionId);
+      });
+    }
+
+    function renderExamQuestionsList() {
+      const container = document.getElementById('eqQuestionsContainer');
+      clearMathJax([container]);
+      if (!currentExamQuestionsData || !currentExamQuestionsData.sections) {
+        container.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 30px;">Không có dữ liệu bài thi.</div>';
+        return;
+      }
+
+      let allQuestions = [];
+      let globalNum = 1;
+      currentExamQuestionsData.sections.forEach(sec => {
+        if (sec.questions) {
+          sec.questions.forEach(q => {
+            allQuestions.push({
+              ...q,
+              globalNumber: globalNum++,
+              section_type: sec.section_type,
+              section_title: sec.title
+            });
+          });
+        }
+      });
+
+      // Lọc theo section_type
+      if (currentQuestionFilter !== 'all') {
+        allQuestions = allQuestions.filter(q => q.section_type === currentQuestionFilter);
+      }
+
+      // Lọc theo từ khóa tìm kiếm
+      if (currentQuestionSearchQuery) {
+        allQuestions = allQuestions.filter(q => {
+          const inContent = q.content && q.content.toLowerCase().includes(currentQuestionSearchQuery);
+          const inOptions = q.options && q.options.some(o => o.content && o.content.toLowerCase().includes(currentQuestionSearchQuery));
+          const inExp = q.explanation && q.explanation.toLowerCase().includes(currentQuestionSearchQuery);
+          return inContent || inOptions || inExp || `câu ${q.globalNumber}`.includes(currentQuestionSearchQuery);
+        });
+      }
+
+      renderQuestionNavigator(allQuestions);
+
+      if (allQuestions.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-dim); text-align: center; padding: 40px 0;"><i class="fa-solid fa-circle-info"></i> Không tìm thấy câu hỏi nào phù hợp với bộ lọc hiện tại.</div>';
+        return;
+      }
+
+      let lastRenderedSectionType = null;
+      container.innerHTML = allQuestions.map(q => {
+        let optionsHtml = '';
+        const sectionHeaderHtml = lastRenderedSectionType !== q.section_type ? `
+          <div class="eq-section-heading">
+            <span class="eq-section-pin"><i class="fa-solid fa-thumbtack"></i></span>
+            <span>&lt;#${q.section_type}&gt;</span>
+            <strong>${escapeHtml(q.section_title)}</strong>
+          </div>
+        ` : '';
+        lastRenderedSectionType = q.section_type;
+        
+        // Phần I: Trắc nghiệm 1 đáp án
+        if (q.section_type === 'g1') {
+          optionsHtml = `
+            <div class="q-options-container">
+              ${(q.options || []).map(opt => `
+                <div class="q-option-row ${opt.is_correct ? 'is-correct' : ''}">
+                  <span class="q-option-label">${opt.option_label}</span>
+                  <span class="q-option-text">${renderSafeQuestionContent(opt.content)}</span>
+                  ${opt.is_correct ? '<span class="badge badge-green" style="margin-left: auto;"><i class="fa-solid fa-circle-check"></i> Đáp án đúng</span>' : ''}
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+        // Phần II: Đúng / Sai
+        else if (q.section_type === 'g2') {
+          optionsHtml = `
+            <div class="q-options-container">
+              ${(q.options || []).map(opt => `
+                <div class="q-option-row">
+                  <span class="q-option-label">${opt.option_label}</span>
+                  <span class="q-option-text">${renderSafeQuestionContent(opt.content)}</span>
+                  <span class="badge ${opt.is_correct ? 'badge-green' : 'badge-red'}" style="margin-left: auto;">
+                    ${opt.is_correct ? '<i class="fa-solid fa-circle-check"></i> ĐÚNG' : '<i class="fa-solid fa-circle-xmark"></i> SAI'}
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+        // Phần III: Trả lời ngắn
+        else if (q.section_type === 'g3') {
+          const correctAns = (q.options && q.options[0]) ? q.options[0].content : '(Chưa thiết lập)';
+          optionsHtml = `
+            <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 14px; margin-top: 8px; display: flex; align-items: center; gap: 10px;">
+              <i class="fa-solid fa-key" style="color: #34d399;"></i>
+              <span style="font-size: 13.5px; color: var(--text-dim);">Đáp án chuẩn học sinh cần nhập:</span>
+              <strong style="color: #34d399; font-size: 15px; font-family: monospace;">${renderSafeQuestionContent(correctAns)}</strong>
+            </div>
+          `;
+        }
+        // Phần IV: Tự luận
+        else if (q.section_type === 'g4') {
+          optionsHtml = `
+            <div style="font-size: 13px; color: var(--text-dim); margin-top: 8px;">
+              <i class="fa-solid fa-pen-clip" style="color: #38bdf8;"></i> Câu hỏi tự luận &bull; Học sinh nhập bài làm văn bản hoặc tải ảnh &bull; Chấm điểm trực tiếp.
+            </div>
+          `;
+        }
+
+        const expHtml = q.explanation ? `
+          <div class="q-explanation-box">
+            <i class="fa-regular fa-lightbulb" style="margin-right: 6px;"></i>
+            <strong>Lời giải chi tiết:</strong> ${renderSafeQuestionContent(q.explanation)}
+          </div>
+        ` : '';
+
+        return `
+          ${sectionHeaderHtml}
+          <div class="q-card" id="qcard-${q.id}">
+            <div class="q-card-header">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="badge badge-blue" style="font-size: 13px; font-weight: 700;">Câu ${q.globalNumber}</span>
+                <span class="badge badge-purple">&lt;#${q.section_type}&gt; ${q.section_title}</span>
+                <span class="badge badge-amber"><i class="fa-solid fa-star"></i> ${parseFloat(q.points).toFixed(2)}đ</span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button onclick="openEditQuestionModal(${q.id})" class="btn btn-primary btn-sm" title="Điều chỉnh nội dung và đáp án câu hỏi">
+                  <i class="fa-solid fa-pen-to-square"></i> Điều chỉnh
+                </button>
+                <button onclick="deleteQuestion(${q.id})" class="btn btn-danger btn-sm" title="Xóa câu hỏi này">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="q-card-content">
+              ${renderSafeQuestionContent(q.content)}
+            </div>
+
+            ${optionsHtml}
+            ${expHtml}
+          </div>
+        `;
+      }).join('');
+
+      normalizeInlineEquationImages(container);
+      renderMathJax(container);
+    }
+
+    function normalizeInlineEquationImages(root) {
+      root.querySelectorAll('img.exam-img').forEach(image => {
+        const formatAsInline = () => {
+          if (!image.naturalHeight || image.naturalHeight > 72 || image.naturalWidth > 500) return;
+          image.classList.remove('exam-img');
+          image.classList.add('inline-math-img');
+          const wrapper = image.closest('.exam-img-box');
+          if (wrapper && wrapper.children.length === 1) wrapper.replaceWith(image);
+        };
+
+        if (image.complete) formatAsInline();
+        else image.addEventListener('load', formatAsInline, { once: true });
+      });
+    }
+
+    // ==================== CHỈNH SỬA CÂU HỎI ====================
+    let currentEditQuestionData = null;
+
+    async function openEditQuestionModal(questionId) {
+      const modal = document.getElementById('editQuestionModal');
+      modal.classList.add('active');
+
+      document.getElementById('edQuestionId').value = questionId;
+      document.getElementById('edContent').value = 'Đang tải...';
+      document.getElementById('edMathPreview').textContent = 'Đang tải...';
+
+      try {
+        const res = await fetch(`/api/admin/questions/${questionId}`);
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi: ' + (data.detail || 'Không thể tải câu hỏi'));
+          closeEditQuestionModal();
+          return;
+        }
+
+        const q = data.question;
+        currentEditQuestionData = q;
+
+        document.getElementById('edQuestionId').value = q.id;
+        document.getElementById('edSectionType').value = q.section_type;
+        document.getElementById('edSectionTitle').value = `${q.section_title} (<#${q.section_type}>)`;
+        document.getElementById('edPoints').value = parseFloat(q.points);
+        document.getElementById('edContent').value = q.content || '';
+        document.getElementById('edExplanation').value = q.explanation || '';
+
+        updateEditMathPreview();
+        buildEditOptionsEditor(q);
+      } catch (err) {
+        alert('Lỗi tải chi tiết câu hỏi: ' + err.message);
+        closeEditQuestionModal();
+      }
+    }
+
+    function closeEditQuestionModal() {
+      document.getElementById('editQuestionModal').classList.remove('active');
+    }
+
+    function updateEditMathPreview() {
+      const preview = document.getElementById('edMathPreview');
+      const content = document.getElementById('edContent').value;
+      clearMathJax([preview]);
+      preview.innerHTML = content
+        ? renderSafeQuestionContent(content)
+        : '<span style="color: var(--text-dim); font-style: italic;">Chưa có nội dung...</span>';
+      renderMathJax(preview);
+    }
+
+    function buildEditOptionsEditor(q) {
+      const container = document.getElementById('edOptionsContainer');
+      const addBtn = document.getElementById('btnEdAddOption');
+      const instruction = document.getElementById('edOptionsInstruction');
+      const sType = q.section_type;
+
+      container.innerHTML = '';
+
+      if (sType === 'g1') {
+        addBtn.style.display = 'inline-flex';
+        instruction.innerHTML = '<i class="fa-solid fa-circle-info"></i> Nhập nội dung từng phương án và <strong>chọn nút tròn (Radio)</strong> ở phương án bạn muốn đặt làm <strong>Đáp Án Đúng</strong>.';
+        const options = (q.options && q.options.length > 0) ? q.options : [
+          { id: null, option_label: 'A', content: '', is_correct: 1 },
+          { id: null, option_label: 'B', content: '', is_correct: 0 },
+          { id: null, option_label: 'C', content: '', is_correct: 0 },
+          { id: null, option_label: 'D', content: '', is_correct: 0 }
+        ];
+
+        container.innerHTML = options.map((opt, idx) => `
+          <div class="edit-option-item" data-opt-id="${opt.id || ''}">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+              <input type="radio" name="ed_g1_correct_radio" value="${idx}" ${opt.is_correct ? 'checked' : ''} style="cursor: pointer;">
+              <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">Đáp án đúng</span>
+            </label>
+            <span class="ed-opt-label-fixed" style="width: 50px; text-align: center; font-weight: 700; padding: 10px 0; border-radius: 8px; background: #1e293b; border: 1px solid var(--border-color);">${String.fromCharCode(65 + idx)}</span>
+            <input type="text" class="form-control ed-opt-content" value="${escapeHtml(opt.content)}" placeholder="Nội dung phương án ${String.fromCharCode(65 + idx)}..." style="flex: 1;">
+            <button type="button" onclick="removeEditOption(this)" class="btn btn-outline btn-sm" title="Xóa phương án này" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `).join('');
+      } else if (sType === 'g2') {
+        addBtn.style.display = 'inline-flex';
+        instruction.innerHTML = '<i class="fa-solid fa-circle-info"></i> Nhập từng khẳng định và tích chọn <strong>Đúng</strong> hoặc <strong>Sai</strong> tương ứng theo quy chế GDPT 2018.';
+        const options = (q.options && q.options.length > 0) ? q.options : [
+          { id: null, option_label: 'a', content: '', is_correct: 1 },
+          { id: null, option_label: 'b', content: '', is_correct: 0 },
+          { id: null, option_label: 'c', content: '', is_correct: 1 },
+          { id: null, option_label: 'd', content: '', is_correct: 0 }
+        ];
+
+        container.innerHTML = options.map((opt, idx) => `
+          <div class="edit-option-item" data-opt-id="${opt.id || ''}">
+            <input type="text" class="form-control ed-opt-label" value="${opt.option_label || String.fromCharCode(97 + idx)}" style="width: 50px; text-align: center; font-weight: 700;">
+            <input type="text" class="form-control ed-opt-content" value="${escapeHtml(opt.content)}" placeholder="Nội dung ý khẳng định..." style="flex: 1;">
+            <div style="display: flex; gap: 12px; align-items: center; white-space: nowrap; margin-left: 8px;">
+              <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <input type="radio" name="ed_g2_tf_${idx}" value="1" ${opt.is_correct ? 'checked' : ''}>
+                <span style="color: #34d399; font-weight: 700; font-size: 13px;">Đúng</span>
+              </label>
+              <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <input type="radio" name="ed_g2_tf_${idx}" value="0" ${!opt.is_correct ? 'checked' : ''}>
+                <span style="color: #f87171; font-weight: 700; font-size: 13px;">Sai</span>
+              </label>
+            </div>
+            <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" title="Xóa ý này" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `).join('');
+      } else if (sType === 'g3') {
+        addBtn.style.display = 'none';
+        instruction.innerHTML = '<i class="fa-solid fa-circle-info"></i> Nhập xâu ký tự đáp án chuẩn mà học sinh phải trả lời (ví dụ: <code>12.5</code>, <code>H2SO4</code>, <code>Nam Bộ</code>,...). Hệ thống sẽ tự chuẩn hóa khi chấm.';
+        const shortAns = (q.options && q.options[0]) ? q.options[0].content : '';
+        const optId = (q.options && q.options[0]) ? q.options[0].id : '';
+
+        container.innerHTML = `
+          <div data-opt-id="${optId}">
+            <label class="form-label">Chuỗi đáp án chính xác</label>
+            <input type="text" id="edShortAnswerInput" class="form-control" value="${escapeHtml(shortAns)}" placeholder="Ví dụ: 12.5 hoặc 3 hoặc Hà Nội" style="font-size: 15px; font-weight: 600; color: #34d399;" required>
+          </div>
+        `;
+      } else if (sType === 'g4') {
+        addBtn.style.display = 'none';
+        instruction.innerHTML = '<i class="fa-solid fa-circle-info"></i> Dạng tự luận không cần cấu hình danh sách đáp án trắc nghiệm. Bạn có thể nhập biểu điểm hoặc dàn ý chấm vào ô <strong>Lời giải chi tiết</strong> bên dưới.';
+        container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px; padding: 6px 0;">Không cần thiết lập phương án trắc nghiệm cho phần tự luận.</div>';
+      }
+    }
+
+    function addOptionRowInEdit() {
+      const container = document.getElementById('edOptionsContainer');
+      const sType = document.getElementById('edSectionType').value;
+      const count = container.querySelectorAll('.edit-option-item').length;
+
+      if (sType === 'g1') {
+        const div = document.createElement('div');
+        div.className = 'edit-option-item';
+        div.dataset.optId = '';
+        div.innerHTML = `
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+            <input type="radio" name="ed_g1_correct_radio" value="${count}" style="cursor: pointer;">
+            <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">Đáp án đúng</span>
+          </label>
+          <span class="ed-opt-label-fixed" style="width: 50px; text-align: center; font-weight: 700; padding: 10px 0; border-radius: 8px; background: #1e293b; border: 1px solid var(--border-color);"></span>
+          <input type="text" class="form-control ed-opt-content" value="" style="flex: 1;">
+          <button type="button" onclick="removeEditOption(this)" class="btn btn-outline btn-sm" title="Xóa phương án này" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+        `;
+        container.appendChild(div);
+        updateEditG1OptionLabels();
+      } else if (sType === 'g2') {
+        const defaultLbl = String.fromCharCode(97 + count);
+        const div = document.createElement('div');
+        div.className = 'edit-option-item';
+        div.dataset.optId = '';
+        div.innerHTML = `
+          <input type="text" class="form-control ed-opt-label" value="${defaultLbl}" style="width: 50px; text-align: center; font-weight: 700;">
+          <input type="text" class="form-control ed-opt-content" value="" placeholder="Nội dung ý khẳng định..." style="flex: 1;">
+          <div style="display: flex; gap: 12px; align-items: center; white-space: nowrap; margin-left: 8px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="ed_g2_tf_${count}" value="1" checked>
+              <span style="color: #34d399; font-weight: 700; font-size: 13px;">Đúng</span>
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="ed_g2_tf_${count}" value="0">
+              <span style="color: #f87171; font-weight: 700; font-size: 13px;">Sai</span>
+            </label>
+          </div>
+          <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" title="Xóa ý này" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    function removeEditOption(button) {
+      button.closest('.edit-option-item').remove();
+      if (document.getElementById('edSectionType').value === 'g1') {
+        updateEditG1OptionLabels();
+      }
+    }
+
+    function updateEditG1OptionLabels() {
+      document.querySelectorAll('#edOptionsContainer .edit-option-item').forEach((item, idx) => {
+        const label = String.fromCharCode(65 + idx);
+        item.querySelector('.ed-opt-label-fixed').textContent = label;
+        item.querySelector('.ed-opt-content').placeholder = `Nội dung phương án ${label}...`;
+        item.querySelector('input[name="ed_g1_correct_radio"]').value = idx;
+      });
+    }
+
+    async function saveQuestionEdit() {
+      const questionId = document.getElementById('edQuestionId').value;
+      const sType = document.getElementById('edSectionType').value;
+      const content = document.getElementById('edContent').value.trim();
+      const points = parseFloat(document.getElementById('edPoints').value);
+      const explanation = document.getElementById('edExplanation').value.trim();
+      const btn = document.getElementById('btnSaveQuestionEdit');
+
+      if (!content) {
+        alert('Vui lòng nhập nội dung câu hỏi!');
+        return;
+      }
+      if (isNaN(points) || points < 0) {
+        alert('Điểm số phải là số dương hợp lệ!');
+        return;
+      }
+
+      const options = [];
+
+      try {
+        if (sType === 'g1') {
+          const items = document.querySelectorAll('#edOptionsContainer .edit-option-item');
+          if (items.length === 0) {
+            alert('Vui lòng thêm ít nhất một phương án lựa chọn!');
+            return;
+          }
+          const checkedRadio = document.querySelector('input[name="ed_g1_correct_radio"]:checked');
+          if (!checkedRadio) {
+            alert('Vui lòng chọn 1 phương án làm đáp án đúng!');
+            return;
+          }
+          const correctIdx = parseInt(checkedRadio.value);
+
+          items.forEach((item, idx) => {
+            const optId = item.dataset.optId ? parseInt(item.dataset.optId) : null;
+            const lbl = String.fromCharCode(65 + idx);
+            const txt = item.querySelector('.ed-opt-content').value.trim();
+            if (!txt) {
+              throw new Error(`Phương án ${lbl || (idx + 1)} chưa có nội dung!`);
+            }
+            options.push({
+              id: optId,
+              option_label: lbl,
+              content: txt,
+              is_correct: (idx === correctIdx) ? 1 : 0
+            });
+          });
+        } else if (sType === 'g2') {
+          const items = document.querySelectorAll('#edOptionsContainer .edit-option-item');
+          if (items.length === 0) {
+            alert('Vui lòng thêm ít nhất một ý khẳng định Đúng/Sai!');
+            return;
+          }
+          items.forEach((item, idx) => {
+            const optId = item.dataset.optId ? parseInt(item.dataset.optId) : null;
+            const lbl = item.querySelector('.ed-opt-label').value.trim();
+            const txt = item.querySelector('.ed-opt-content').value.trim();
+            if (!txt) {
+              throw new Error(`Ý khẳng định ${lbl || (idx + 1)} chưa có nội dung!`);
+            }
+            const radioEl = item.querySelector(`input[name="ed_g2_tf_${idx}"][value="1"]`);
+            const isTrueChecked = radioEl ? radioEl.checked : true;
+            options.push({
+              id: optId,
+              option_label: lbl,
+              content: txt,
+              is_correct: isTrueChecked ? 1 : 0
+            });
+          });
+        } else if (sType === 'g3') {
+          const shortAnsInp = document.getElementById('edShortAnswerInput');
+          const txt = shortAnsInp ? shortAnsInp.value.trim() : '';
+          if (!txt) {
+            alert('Vui lòng nhập chuỗi đáp án chuẩn cho câu trả lời ngắn!');
+            return;
+          }
+          const optIdDiv = document.querySelector('#edOptionsContainer > div');
+          const optId = (optIdDiv && optIdDiv.dataset.optId) ? parseInt(optIdDiv.dataset.optId) : null;
+          options.push({
+            id: optId,
+            option_label: 'ANS',
+            content: txt,
+            is_correct: 1
+          });
+        }
+      } catch (validationErr) {
+        alert(validationErr.message);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+
+      try {
+        const res = await fetch(`/api/admin/questions/${questionId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            points,
+            explanation,
+            ...(sType === 'g4' ? {} : { options })
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi: ' + (data.detail || 'Không thể lưu câu hỏi'));
+        } else {
+          alert(data.message);
+          closeEditQuestionModal();
+          // Tải lại câu hỏi và cập nhật danh sách đề thi
+          if (currentExamQuestionsData) {
+            openExamQuestionsModal(currentExamQuestionsData.id);
+          }
+          loadAdminExams();
+        }
+      } catch (err) {
+        alert('Lỗi lưu câu hỏi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi';
+      }
+    }
+
+    async function deleteQuestion(questionId) {
+      if (!confirm('Bạn có chắc chắn muốn xóa câu hỏi này khỏi đề thi không? Thao tác này không thể hoàn tác.')) return;
+      try {
+        const res = await fetch(`/api/admin/questions/${questionId}`, { method: 'DELETE' });
+        const data = await res.json();
+        alert(data.message);
+        if (currentExamQuestionsData) {
+          openExamQuestionsModal(currentExamQuestionsData.id);
+        }
+        loadAdminExams();
+      } catch (err) {
+        alert('Lỗi xóa câu hỏi: ' + err.message);
+      }
+    }
+
+    // ==================== THÊM CÂU HỎI MỚI ====================
+    function openAddQuestionModal() {
+      if (!currentExamQuestionsData || !currentExamQuestionsData.sections || currentExamQuestionsData.sections.length === 0) {
+        alert('Đề thi chưa có phần thi (Section) nào để thêm câu hỏi!');
+        return;
+      }
+      const modal = document.getElementById('addQuestionModal');
+      const select = document.getElementById('addQSectionSelect');
+      select.innerHTML = '';
+
+      currentExamQuestionsData.sections.forEach(sec => {
+        const opt = document.createElement('option');
+        opt.value = sec.id;
+        opt.dataset.sectionType = sec.section_type;
+        opt.textContent = `${sec.title} (<#${sec.section_type}>)`;
+        select.appendChild(opt);
+      });
+
+      document.getElementById('addQContent').value = '';
+      document.getElementById('addQPoints').value = 0.25;
+      document.getElementById('addQExplanation').value = '';
+      updateAddMathPreview();
+
+      handleAddSectionChange();
+      modal.classList.add('active');
+    }
+
+    function closeAddQuestionModal() {
+      document.getElementById('addQuestionModal').classList.remove('active');
+    }
+
+    function updateAddMathPreview() {
+      const preview = document.getElementById('addQMathPreview');
+      const content = document.getElementById('addQContent').value;
+      clearMathJax([preview]);
+      preview.innerHTML = content || '<span style="color: var(--text-dim); font-style: italic;">Chưa có nội dung...</span>';
+      renderMathJax(preview);
+    }
+
+    function handleAddSectionChange() {
+      const select = document.getElementById('addQSectionSelect');
+      const selectedOpt = select.selectedOptions[0];
+      if (!selectedOpt) return;
+      const sType = selectedOpt.dataset.sectionType;
+      const container = document.getElementById('addQOptionsContainer');
+      const addBtn = document.getElementById('btnAddQOptionBtn');
+      const instruction = document.getElementById('addQOptionsInstruction');
+
+      container.innerHTML = '';
+
+      if (sType === 'g1') {
+        addBtn.style.display = 'inline-flex';
+        instruction.innerHTML = 'Nhập nội dung 4 phương án A, B, C, D và chọn 1 đáp án đúng:';
+        container.innerHTML = ['A', 'B', 'C', 'D'].map((lbl, idx) => `
+          <div class="edit-option-item">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+              <input type="radio" name="add_g1_correct_radio" value="${idx}" ${idx === 0 ? 'checked' : ''}>
+              <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">Đáp án đúng</span>
+            </label>
+            <input type="text" class="form-control add-opt-label" value="${lbl}" style="width: 50px; text-align: center; font-weight: 700;">
+            <input type="text" class="form-control add-opt-content" placeholder="Nội dung phương án ${lbl}..." style="flex: 1;">
+            <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `).join('');
+      } else if (sType === 'g2') {
+        addBtn.style.display = 'inline-flex';
+        instruction.innerHTML = 'Nhập 4 khẳng định a, b, c, d và tích chọn Đúng/Sai:';
+        container.innerHTML = ['a', 'b', 'c', 'd'].map((lbl, idx) => `
+          <div class="edit-option-item">
+            <input type="text" class="form-control add-opt-label" value="${lbl}" style="width: 50px; text-align: center; font-weight: 700;">
+            <input type="text" class="form-control add-opt-content" placeholder="Nội dung ý khẳng định ${lbl}..." style="flex: 1;">
+            <div style="display: flex; gap: 12px; align-items: center; white-space: nowrap; margin-left: 8px;">
+              <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <input type="radio" name="add_g2_tf_${idx}" value="1" checked>
+                <span style="color: #34d399; font-weight: 700; font-size: 13px;">Đúng</span>
+              </label>
+              <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                <input type="radio" name="add_g2_tf_${idx}" value="0">
+                <span style="color: #f87171; font-weight: 700; font-size: 13px;">Sai</span>
+              </label>
+            </div>
+            <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        `).join('');
+      } else if (sType === 'g3') {
+        addBtn.style.display = 'none';
+        instruction.innerHTML = 'Nhập chuỗi đáp án chính xác học sinh cần nhập:';
+        container.innerHTML = `
+          <div>
+            <label class="form-label">Đáp án đúng chuẩn</label>
+            <input type="text" id="addShortAnswerInput" class="form-control" placeholder="Ví dụ: 2024 hoặc H2SO4..." style="font-size: 15px; font-weight: 600; color: #34d399;" required>
+          </div>
+        `;
+      } else if (sType === 'g4') {
+        addBtn.style.display = 'none';
+        instruction.innerHTML = 'Dạng tự luận &bull; Không cần cấu hình trắc nghiệm.';
+        container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px;">Nhập gợi ý/thang điểm vào ô Lời giải chi tiết bên dưới.</div>';
+      }
+    }
+
+    function addOptionRowInAdd() {
+      const container = document.getElementById('addQOptionsContainer');
+      const select = document.getElementById('addQSectionSelect');
+      const sType = select.selectedOptions[0].dataset.sectionType;
+      const count = container.querySelectorAll('.edit-option-item').length;
+
+      if (sType === 'g1') {
+        const lbl = String.fromCharCode(65 + count);
+        const div = document.createElement('div');
+        div.className = 'edit-option-item';
+        div.innerHTML = `
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; white-space: nowrap;">
+            <input type="radio" name="add_g1_correct_radio" value="${count}">
+            <span style="font-weight: 700; color: #38bdf8; font-size: 13px;">Đáp án đúng</span>
+          </label>
+          <input type="text" class="form-control add-opt-label" value="${lbl}" style="width: 50px; text-align: center; font-weight: 700;">
+          <input type="text" class="form-control add-opt-content" placeholder="Nội dung phương án ${lbl}..." style="flex: 1;">
+          <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+        `;
+        container.appendChild(div);
+      } else if (sType === 'g2') {
+        const lbl = String.fromCharCode(97 + count);
+        const div = document.createElement('div');
+        div.className = 'edit-option-item';
+        div.innerHTML = `
+          <input type="text" class="form-control add-opt-label" value="${lbl}" style="width: 50px; text-align: center; font-weight: 700;">
+          <input type="text" class="form-control add-opt-content" placeholder="Nội dung ý khẳng định ${lbl}..." style="flex: 1;">
+          <div style="display: flex; gap: 12px; align-items: center; white-space: nowrap; margin-left: 8px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="add_g2_tf_${count}" value="1" checked>
+              <span style="color: #34d399; font-weight: 700; font-size: 13px;">Đúng</span>
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="add_g2_tf_${count}" value="0">
+              <span style="color: #f87171; font-weight: 700; font-size: 13px;">Sai</span>
+            </label>
+          </div>
+          <button type="button" onclick="this.closest('.edit-option-item').remove()" class="btn btn-outline btn-sm" style="color: #ef4444;"><i class="fa-solid fa-trash"></i></button>
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    async function submitAddQuestion() {
+      const select = document.getElementById('addQSectionSelect');
+      const sectionId = parseInt(select.value);
+      const sType = select.selectedOptions[0].dataset.sectionType;
+      const content = document.getElementById('addQContent').value.trim();
+      const points = parseFloat(document.getElementById('addQPoints').value);
+      const explanation = document.getElementById('addQExplanation').value.trim();
+      const btn = document.getElementById('btnSubmitAddQuestion');
+
+      if (!content) {
+        alert('Vui lòng nhập nội dung câu hỏi!');
+        return;
+      }
+      if (isNaN(points) || points < 0) {
+        alert('Điểm số phải là số dương hợp lệ!');
+        return;
+      }
+
+      const options = [];
+      try {
+        if (sType === 'g1') {
+          const items = document.querySelectorAll('#addQOptionsContainer .edit-option-item');
+          if (items.length === 0) return alert('Vui lòng thêm ít nhất một phương án lựa chọn!');
+          const checkedRadio = document.querySelector('input[name="add_g1_correct_radio"]:checked');
+          if (!checkedRadio) return alert('Vui lòng chọn 1 phương án làm đáp án đúng!');
+          const correctIdx = parseInt(checkedRadio.value);
+
+          items.forEach((item, idx) => {
+            const lbl = item.querySelector('.add-opt-label').value.trim();
+            const txt = item.querySelector('.add-opt-content').value.trim();
+            if (!txt) throw new Error(`Phương án ${lbl || (idx + 1)} chưa có nội dung!`);
+            options.push({
+              option_label: lbl,
+              content: txt,
+              is_correct: (idx === correctIdx) ? 1 : 0
+            });
+          });
+        } else if (sType === 'g2') {
+          const items = document.querySelectorAll('#addQOptionsContainer .edit-option-item');
+          if (items.length === 0) return alert('Vui lòng thêm ít nhất một ý khẳng định!');
+          items.forEach((item, idx) => {
+            const lbl = item.querySelector('.add-opt-label').value.trim();
+            const txt = item.querySelector('.add-opt-content').value.trim();
+            if (!txt) throw new Error(`Ý khẳng định ${lbl || (idx + 1)} chưa có nội dung!`);
+            const radioEl = item.querySelector(`input[name="add_g2_tf_${idx}"][value="1"]`);
+            const isTrueChecked = radioEl ? radioEl.checked : true;
+            options.push({
+              option_label: lbl,
+              content: txt,
+              is_correct: isTrueChecked ? 1 : 0
+            });
+          });
+        } else if (sType === 'g3') {
+          const txt = document.getElementById('addShortAnswerInput').value.trim();
+          if (!txt) return alert('Vui lòng nhập chuỗi đáp án chuẩn!');
+          options.push({
+            option_label: 'ANS',
+            content: txt,
+            is_correct: 1
+          });
+        }
+      } catch (valErr) {
+        alert(valErr.message);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang thêm...';
+
+      try {
+        const res = await fetch(`/api/admin/sections/${sectionId}/questions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            points,
+            explanation,
+            options
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Lỗi: ' + (data.detail || 'Không thể tạo câu hỏi'));
+        } else {
+          alert(data.message);
+          closeAddQuestionModal();
+          if (currentExamQuestionsData) {
+            openExamQuestionsModal(currentExamQuestionsData.id);
+          }
+          loadAdminExams();
+        }
+      } catch (err) {
+        alert('Lỗi thêm câu hỏi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-plus"></i> Thêm vào đề thi';
+      }
     }
 
     function handleLogout() {
@@ -928,7 +2336,7 @@
 
     window.onload = () => {
       checkAdminAuth();
-      loadAdminExams();
+      loadExamClassOptions();
     };
   </script>
 </body>

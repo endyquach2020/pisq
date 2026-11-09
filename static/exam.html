@@ -7,14 +7,31 @@
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <!-- KaTeX for high-speed mathematical rendering -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true
+      },
+      startup: { typeset: false },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 <body>
-  <!-- Header đúng theo mockup trang 2 của tài liệu -->
+  <!-- Header -->
   <header class="exam-header">
+    <div id="activeSectionBadge" class="exam-section-badge">
+      PHẦN I · TRẮC NGHIỆM NHIỀU LỰA CHỌN
+    </div>
+    <span class="exam-progress" id="qProgressIndicator">Câu 1 / 20</span>
+
+    <div id="connectionStatus" class="connection-status" role="status" aria-live="polite">
+      <i class="fa-solid fa-cloud"></i><span>Đã lưu trên thiết bị</span>
+    </div>
+
     <div class="student-tag">
       <div class="student-avatar" id="studentAvatar">A</div>
       <div>
@@ -23,12 +40,6 @@
       </div>
     </div>
 
-    <!-- Section badge động ở giữa -->
-    <div id="activeSectionBadge" class="exam-section-badge">
-      PHẦN I - TRẮC NGHIỆM NHIỀU LỰA CHỌN
-    </div>
-
-    <!-- Đồng hồ đếm ngược -->
     <div class="countdown-box" id="timerBox">
       <i class="fa-regular fa-clock"></i>
       <span id="timerText">45:00</span>
@@ -42,14 +53,15 @@
       <div class="question-meta-bar">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="question-num-pill" id="qBadge">Câu 1</span>
-          <span class="badge badge-gray" id="qStatusBadge">Chưa làm</span>
+          <span class="question-section-label" id="qSectionLabel">Phần I</span>
         </div>
-        <div style="font-size: 13px; color: var(--text-dim);" id="qPointsBadge">
-          Điểm: 0.25đ
+        <div class="question-meta-status">
+          <span class="badge badge-gray" id="qStatusBadge">Chưa làm</span>
+          <span class="question-points" id="qPointsBadge">Điểm: 0.25đ</span>
         </div>
       </div>
 
-      <!-- Nội dung câu hỏi (chứa KaTeX và ảnh) -->
+      <!-- Nội dung câu hỏi (chứa công thức LaTeX và ảnh) -->
       <div class="question-content-box" id="qContent">
         Đang tải câu hỏi...
       </div>
@@ -64,9 +76,6 @@
         <button id="btnPrev" onclick="navigateQuestion(-1)" class="btn btn-outline">
           <i class="fa-solid fa-arrow-left"></i> Câu trước
         </button>
-        <span style="font-size: 14px; color: var(--text-dim);" id="qProgressIndicator">
-          Câu 1 / 20
-        </span>
         <button id="btnNext" onclick="navigateQuestion(1)" class="btn btn-primary">
           Câu sau <i class="fa-solid fa-arrow-right"></i>
         </button>
@@ -75,24 +84,32 @@
 
     <!-- CỘT PHẢI: Sơ đồ câu hỏi (Question Matrix) -->
     <div class="matrix-sidebar">
-      <div class="matrix-header">
-        <span>SƠ ĐỒ CÂU HỎI</span>
-        <span id="matrixCounter" class="badge badge-blue">0/20</span>
+      <div class="matrix-panel">
+        <div class="matrix-header">
+          <span>SƠ ĐỒ CÂU HỎI</span>
+          <span id="matrixCounter" class="badge badge-blue">0/20</span>
+        </div>
+        <div id="matrixSectionFilters" class="matrix-section-filters" aria-label="Lọc câu hỏi theo phần"></div>
+        <div id="matrixSectionsContainer" class="matrix-sections-container">
+          <!-- Đổ động các nút câu hỏi theo từng phần -->
+        </div>
+        <div class="matrix-legend">
+          <span><i class="legend-dot answered"></i> Đã làm</span>
+          <span><i class="legend-dot unanswered"></i> Chưa làm</span>
+          <span><i class="legend-dot current"></i> Đang xem</span>
+        </div>
       </div>
 
-      <!-- Container các nhóm section và nút câu hỏi -->
-      <div id="matrixSectionsContainer" style="overflow-y: auto; max-height: calc(100vh - 360px); padding-right: 4px;">
-        <!-- Đổ động các nút 1, 2, 3... theo từng phần -->
-      </div>
-
-      <!-- Nút Nộp Bài Kiểm Tra -->
       <button onclick="promptSubmitExam()" class="btn-submit-exam">
         <i class="fa-solid fa-paper-plane"></i> Nộp bài kiểm tra
       </button>
 
-      <div class="matrix-footer-info">
-        <div><i class="fa-regular fa-clock"></i> Thời gian: <span id="footerDuration">45:00</span></div>
-        <div><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Đã làm: <span id="footerAnswered">0</span> câu</div>
+      <div class="matrix-progress-card">
+        <div id="sectionStats" class="section-stats"></div>
+        <div class="matrix-footer-info">
+          <div><i class="fa-regular fa-clock"></i> Thời gian: <span id="footerDuration">45:00</span></div>
+          <div><i class="fa-solid fa-circle-check" style="color: #10b981;"></i> Tổng đã làm: <span id="footerAnswered">0</span> câu</div>
+        </div>
       </div>
     </div>
   </div>
@@ -130,6 +147,7 @@
         <div style="font-size: 15px; color: var(--text-main);" id="resultStats">
           Số câu đúng: <strong>18 / 20</strong> câu
         </div>
+        <p id="resultDriveStatus" style="margin-top: 12px; color: var(--text-muted);"></p>
       </div>
       <div class="modal-footer" style="justify-content: center;">
         <button onclick="window.location.href='/'" class="btn btn-primary btn-lg">
@@ -145,8 +163,15 @@
     let submissionId = null;
     let questionsList = [];
     let currentIndex = 0;
+    let activeMatrixSection = 'all';
     let studentAnswers = {}; // { question_id: { selected_option_id, text_answer, tf_answers } }
+    let pendingAnswerSync = {};
+    let localSessionKey = null;
+    let localSessionAvailable = true;
+    let answerSyncPromise = null;
+    let answerSyncTimeout = null;
     let timerInterval = null;
+    let isSubmitting = false;
     let remainingSeconds = 45 * 60;
 
     // Lấy ID đề thi từ URL
@@ -171,6 +196,10 @@
         return;
       }
 
+      localSessionKey = `pisq_exam_session_${examId}_${user.id}`;
+      const cachedSession = readLocalExamSession();
+      await registerOfflineSupport();
+
       // Gửi yêu cầu bắt đầu hoặc khôi phục bài thi
       const formData = new FormData();
       formData.append('student_id', user.id);
@@ -183,64 +212,187 @@
         const data = await res.json();
 
         if (data.status === 'already_submitted') {
+          clearLocalExamSession();
           alert(`Bạn đã nộp bài thi này rồi! Điểm số: ${data.score}`);
           window.location.href = '/';
           return;
         }
 
         if (!res.ok) {
-          alert(data.detail || 'Không thể tải đề thi!');
-          window.location.href = '/';
+          throw new Error(data.detail || 'Không thể tải đề thi!');
+        }
+
+        pendingAnswerSync = cachedSession?.pending_answers || {};
+        initializeExamSession(data, cachedSession, false);
+        updateConnectionStatus(
+          Object.keys(pendingAnswerSync).length ? 'syncing' : 'online'
+        );
+        flushPendingAnswers();
+      } catch (err) {
+        if (cachedSession) {
+          pendingAnswerSync = cachedSession.pending_answers || {};
+          initializeExamSession(cachedSession.exam_data, cachedSession, true);
+          updateConnectionStatus('offline');
           return;
         }
 
-        examData = data;
-        submissionId = data.submission_id;
-
-        // Flatten questions list để dễ dàng duyệt tiến / lùi
-        questionsList = [];
-        data.shuffled_exam.forEach(sec => {
-          sec.questions.forEach(q => {
-            questionsList.push({
-              ...q,
-              section_id: sec.id,
-              section_type: sec.section_type,
-              section_title: sec.title
-            });
-          });
-        });
-
-        // Khôi phục các câu trả lời đã lưu nếu đang làm dở
-        if (data.saved_answers) {
-          data.saved_answers.forEach(ans => {
-            let tf = null;
-            if (ans.text_answer && ans.text_answer.startsWith('{')) {
-              try { tf = JSON.parse(ans.text_answer); } catch(e){}
-            }
-            studentAnswers[ans.question_id] = {
-              selected_option_id: ans.selected_option_id,
-              text_answer: ans.text_answer,
-              tf_answers: tf
-            };
-          });
-        }
-
-        // Tính thời gian còn lại
-        const startTime = new Date(data.start_time).getTime();
-        const durationMs = data.duration_minutes * 60 * 1000;
-        const now = new Date().getTime();
-        const elapsedSeconds = Math.floor((now - startTime) / 1000);
-        remainingSeconds = Math.max(0, (data.duration_minutes * 60) - elapsedSeconds);
-
-        document.getElementById('footerDuration').textContent = `${data.duration_minutes}:00`;
-
-        buildMatrix();
-        renderCurrentQuestion();
-        startTimer();
-      } catch (err) {
-        alert('Lỗi khởi tạo bài thi: ' + err.message);
+        updateConnectionStatus('error');
+        alert('Không thể tải bài thi. Hãy kết nối mạng để mở bài thi lần đầu. Lỗi: ' + err.message);
       }
     }
+
+    function initializeExamSession(data, cachedSession, isOffline) {
+      examData = data;
+      submissionId = data.submission_id;
+      studentAnswers = {};
+
+      questionsList = [];
+      data.shuffled_exam.forEach(sec => {
+        sec.questions.forEach(q => {
+          questionsList.push({
+            ...q,
+            section_id: sec.id,
+            section_type: sec.section_type,
+            section_title: sec.title
+          });
+        });
+      });
+
+      if (data.saved_answers) {
+        data.saved_answers.forEach(ans => {
+          let tf = null;
+          if (ans.text_answer && ans.text_answer.startsWith('{')) {
+            try { tf = JSON.parse(ans.text_answer); } catch (error) {
+              console.warn('Không thể khôi phục câu trả lời Đúng/Sai:', error);
+            }
+          }
+          studentAnswers[ans.question_id] = {
+            selected_option_id: ans.selected_option_id,
+            text_answer: ans.text_answer,
+            tf_answers: tf
+          };
+        });
+      }
+
+      const cachedAnswers = cachedSession?.student_answers || {};
+      if (isOffline) {
+        studentAnswers = cachedAnswers;
+      } else {
+        Object.keys(pendingAnswerSync).forEach(questionId => {
+          if (cachedAnswers[questionId]) {
+            studentAnswers[questionId] = cachedAnswers[questionId];
+          }
+        });
+      }
+
+      const elapsedSeconds = Math.floor(
+        (Date.now() - new Date(data.start_time).getTime()) / 1000
+      );
+      remainingSeconds = Math.max(
+        0,
+        data.duration_minutes * 60 - elapsedSeconds
+      );
+      currentIndex = Math.min(
+        Math.max(0, Number(cachedSession?.current_index || 0)),
+        Math.max(0, questionsList.length - 1)
+      );
+
+      document.getElementById('footerDuration').textContent = `${data.duration_minutes}:00`;
+      buildMatrix();
+      renderCurrentQuestion();
+      persistLocalExamSession();
+      startTimer();
+    }
+
+    function readLocalExamSession() {
+      try {
+        const storedSession = localStorage.getItem(localSessionKey);
+        return storedSession ? JSON.parse(storedSession) : null;
+      } catch (error) {
+        console.error('Không thể đọc bài thi đã lưu trên thiết bị:', error);
+        updateConnectionStatus('storage-error');
+        return null;
+      }
+    }
+
+    function persistLocalExamSession() {
+      if (!localSessionKey || !examData || !submissionId) return false;
+      try {
+        localStorage.setItem(localSessionKey, JSON.stringify({
+          submission_id: submissionId,
+          exam_data: examData,
+          student_answers: studentAnswers,
+          pending_answers: pendingAnswerSync,
+          current_index: currentIndex,
+          saved_at: Date.now()
+        }));
+        return true;
+      } catch (error) {
+        localSessionAvailable = false;
+        console.error('Không thể lưu bài thi trên thiết bị:', error);
+        updateConnectionStatus('storage-error');
+        return false;
+      }
+    }
+
+    function clearLocalExamSession() {
+      if (!localSessionKey) return;
+      try {
+        localStorage.removeItem(localSessionKey);
+      } catch (error) {
+        console.error('Không thể xóa bản lưu bài thi trên thiết bị:', error);
+      }
+    }
+
+    async function registerOfflineSupport() {
+      if (!('serviceWorker' in navigator)) {
+        updateConnectionStatus('storage-only');
+        return;
+      }
+
+      try {
+        await navigator.serviceWorker.register('/service-worker.js');
+        await navigator.serviceWorker.ready;
+      } catch (error) {
+        console.error('Không thể bật chế độ tải trang thi offline:', error);
+        updateConnectionStatus('storage-only');
+      }
+    }
+
+    function updateConnectionStatus(state) {
+      const status = document.getElementById('connectionStatus');
+      if (!status) return;
+      const messages = {
+        online: ['fa-cloud', 'Đã lưu trên thiết bị'],
+        offline: ['fa-cloud-arrow-down', 'Mất mạng · Đang lưu trên thiết bị'],
+        syncing: ['fa-arrows-rotate', 'Đang đồng bộ câu trả lời'],
+        'storage-only': ['fa-hard-drive', 'Đang lưu trên thiết bị'],
+        'storage-error': ['fa-triangle-exclamation', 'Không lưu được trên thiết bị'],
+        'offline-storage-error': ['fa-triangle-exclamation', 'Mất mạng · Không lưu được bài thi'],
+        error: ['fa-triangle-exclamation', 'Không thể tải bài thi']
+      };
+      if (!localSessionAvailable && state === 'offline') {
+        state = 'offline-storage-error';
+      } else if (!localSessionAvailable && ['online', 'syncing', 'storage-only'].includes(state)) {
+        state = 'storage-error';
+      }
+      const [icon, message] = messages[state] || messages.online;
+      status.className = `connection-status ${state}`;
+      status.innerHTML = `<i class="fa-solid ${icon}"></i><span>${message}</span>`;
+    }
+
+    window.addEventListener('online', () => {
+      if (!submissionId) return;
+      updateConnectionStatus('syncing');
+      flushPendingAnswers();
+      if (remainingSeconds <= 0) finalizeSubmitExam();
+    });
+
+    window.addEventListener('offline', () => {
+      if (submissionId) updateConnectionStatus('offline');
+    });
+
+    window.addEventListener('beforeunload', persistLocalExamSession);
 
     function startTimer() {
       updateTimerDisplay();
@@ -268,36 +420,105 @@
       }
     }
 
+    function sectionShortName(sectionType) {
+      return {
+        g1: 'Phần I',
+        g2: 'Phần II',
+        g3: 'Phần III',
+        g4: 'Phần IV'
+      }[sectionType] || 'Phần thi';
+    }
+
+    function sectionDisplayName(sectionType) {
+      return sectionShortName(sectionType);
+    }
+
     function buildMatrix() {
+      const filters = document.getElementById('matrixSectionFilters');
+      filters.innerHTML = '';
+      const allSectionsButton = document.createElement('button');
+      allSectionsButton.type = 'button';
+      allSectionsButton.className = 'matrix-filter-button';
+      allSectionsButton.dataset.sectionId = 'all';
+      allSectionsButton.textContent = 'Tất cả';
+      allSectionsButton.onclick = () => setMatrixSectionFilter('all');
+      filters.appendChild(allSectionsButton);
+
+      examData.shuffled_exam.forEach(sec => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'matrix-filter-button';
+        button.dataset.sectionId = String(sec.id);
+        button.textContent = sectionShortName(sec.section_type);
+        button.title = sec.title;
+        button.onclick = () => setMatrixSectionFilter(String(sec.id));
+        filters.appendChild(button);
+      });
+
+      const stats = document.getElementById('sectionStats');
+      stats.innerHTML = '';
+      examData.shuffled_exam.forEach(sec => {
+        const row = document.createElement('div');
+        row.className = `section-stat-row ${sec.section_type}`;
+        const label = document.createElement('span');
+        label.textContent = `${sectionShortName(sec.section_type)} đã làm`;
+        const count = document.createElement('strong');
+        count.dataset.sectionAnswered = sec.id;
+        count.dataset.sectionTotal = sec.questions.length;
+        count.textContent = `0/${sec.questions.length}`;
+        row.append(label, count);
+        stats.appendChild(row);
+      });
+
+      renderMatrixSections();
+    }
+
+    function setMatrixSectionFilter(sectionId) {
+      activeMatrixSection = sectionId;
+      renderMatrixSections();
+    }
+
+    function renderMatrixSections() {
+      const filters = document.getElementById('matrixSectionFilters');
+      Array.from(filters.children).forEach(button => {
+        button.classList.toggle('active', button.dataset.sectionId === activeMatrixSection);
+      });
+
       const container = document.getElementById('matrixSectionsContainer');
       container.innerHTML = '';
 
       let globalQIndex = 0;
-      examData.shuffled_exam.forEach((sec, sIdx) => {
-        const secDiv = document.createElement('div');
-        secDiv.innerHTML = `<div class="matrix-sec-title">${sec.title}</div>`;
+      examData.shuffled_exam.forEach(sec => {
+        const visible = activeMatrixSection === 'all' || String(sec.id) === activeMatrixSection;
+        if (visible) {
+          const secDiv = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = `matrix-sec-title ${sec.section_type}`;
+          title.textContent = sectionShortName(sec.section_type);
+          title.title = sec.title;
 
-        const grid = document.createElement('div');
-        grid.className = 'matrix-grid';
+          const grid = document.createElement('div');
+          grid.className = 'matrix-grid';
 
-        sec.questions.forEach((q) => {
-          const btn = document.createElement('button');
-          const qIdx = globalQIndex;
-          btn.className = 'matrix-btn';
-          btn.id = `matrix-btn-${q.id}`;
-          btn.textContent = q.number;
-          btn.onclick = () => jumpToQuestion(qIdx);
+          sec.questions.forEach(q => {
+            const btn = document.createElement('button');
+            const qIdx = globalQIndex;
+            btn.type = 'button';
+            btn.className = 'matrix-btn';
+            btn.id = `matrix-btn-${q.id}`;
+            btn.textContent = q.number;
+            btn.setAttribute('aria-label', `${sectionShortName(sec.section_type)}, câu ${q.number}`);
+            btn.onclick = () => jumpToQuestion(qIdx);
 
-          if (studentAnswers[q.id] && isAnswerProvided(studentAnswers[q.id], sec.section_type)) {
-            btn.classList.add('answered');
-          }
+            grid.appendChild(btn);
+            globalQIndex++;
+          });
 
-          grid.appendChild(btn);
-          globalQIndex++;
-        });
-
-        secDiv.appendChild(grid);
-        container.appendChild(secDiv);
+          secDiv.append(title, grid);
+          container.appendChild(secDiv);
+        } else {
+          globalQIndex += sec.questions.length;
+        }
       });
 
       updateMatrixStats();
@@ -318,21 +539,30 @@
         const answered = isAnswerProvided(studentAnswers[q.id], q.section_type);
         if (btn) {
           btn.classList.toggle('answered', answered);
-          btn.classList.toggle('current', questionsList[currentIndex].id === q.id);
+          btn.classList.toggle('current', questionsList[currentIndex]?.id === q.id);
         }
         if (answered) answeredCount++;
       });
 
       document.getElementById('matrixCounter').textContent = `${answeredCount}/${questionsList.length}`;
       document.getElementById('footerAnswered').textContent = answeredCount;
+      examData.shuffled_exam.forEach(sec => {
+        const answeredInSection = sec.questions.reduce((count, question) =>
+          count + Number(isAnswerProvided(studentAnswers[question.id], sec.section_type)), 0
+        );
+        const countElement = document.querySelector(`[data-section-answered="${sec.id}"]`);
+        if (countElement) countElement.textContent = `${answeredInSection}/${sec.questions.length}`;
+      });
     }
 
     function renderCurrentQuestion() {
       const q = questionsList[currentIndex];
       if (!q) return;
+      persistLocalExamSession();
 
       // Cập nhật Section Badge trên header
-      document.getElementById('activeSectionBadge').textContent = `<#${q.section_type}> ${q.section_title}`;
+      document.getElementById('activeSectionBadge').textContent = sectionDisplayName(q.section_type);
+      document.getElementById('qSectionLabel').textContent = sectionShortName(q.section_type);
 
       // Cập nhật thông tin câu
       document.getElementById('qBadge').textContent = `Câu ${q.number}`;
@@ -346,7 +576,9 @@
 
       // Render nội dung câu hỏi
       const contentEl = document.getElementById('qContent');
+      clearMathJax([contentEl, document.getElementById('qOptionsContainer')]);
       contentEl.innerHTML = q.content;
+      normalizeInlineEquationImages(contentEl);
 
       // Render các lựa chọn theo loại section
       const optContainer = document.getElementById('qOptionsContainer');
@@ -371,6 +603,7 @@
           optList.appendChild(card);
         });
         optContainer.appendChild(optList);
+        normalizeInlineEquationImages(optList);
       }
 
       // 2. Phần II: Trắc nghiệm Đúng / Sai (g2)
@@ -400,41 +633,65 @@
           table.appendChild(row);
         });
         optContainer.appendChild(table);
+        normalizeInlineEquationImages(table);
       }
 
       // 3. Phần III: Trả lời ngắn (g3)
       else if (q.section_type === 'g3') {
         const div = document.createElement('div');
-        div.style.marginBottom = '24px';
+        div.className = 'short-answer-box';
         div.innerHTML = `
-          <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
-            HỌC SINH NHẬP ĐÁP ÁN NGẮN VÀO Ô DƯỚI ĐÂY:
+          <label class="short-answer-label" for="shortAnsInput">
+            Trả lời ngắn
           </label>
-          <input type="text" class="short-answer-input" id="shortAnsInput" 
-                 value="${currentAns.text_answer || ''}" 
-                 placeholder="Gõ đáp án của bạn..." 
+          <input type="text" class="form-control short-answer-input" id="shortAnsInput"
+                 aria-label="Nhập đáp án ngắn"
+                 placeholder="Nhập đáp án của bạn..."
+                 autocomplete="off"
                  oninput="handleShortAnswerInput(${q.id}, this.value)">
         `;
+        div.querySelector('#shortAnsInput').value = currentAns.text_answer || '';
         optContainer.appendChild(div);
       }
 
       // 4. Phần IV: Tự luận (g4)
       else if (q.section_type === 'g4') {
         const div = document.createElement('div');
-        div.style.marginBottom = '24px';
+        div.className = 'essay-answer-box';
         div.innerHTML = `
-          <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
-            BÀI LÀM TỰ LUẬN / BÀI NGHE CỦA HỌC SINH:
+          <label class="essay-answer-label">
+            Bài làm tự luận
           </label>
-          <textarea class="form-control" style="min-height: 160px; font-size: 15px;" 
-                    placeholder="Nhập nội dung bài làm tự luận của bạn tại đây..." 
-                    oninput="handleShortAnswerInput(${q.id}, this.value)">${currentAns.text_answer || ''}</textarea>
+          <p class="essay-answer-help">
+            Trình bày lời giải theo từng bước. Có thể xuống dòng để viết phép tính và công thức; nội dung được tự động lưu.
+          </p>
+          <textarea class="form-control essay-answer-editor" rows="14"
+                    aria-label="Nhập bài làm tự luận"
+                    placeholder="Nhập lời giải của bạn tại đây...&#10;&#10;Ví dụ:&#10;Bước 1: ...&#10;Bước 2: ...&#10;Kết luận: ..."
+                    oninput="handleShortAnswerInput(${q.id}, this.value)"></textarea>
         `;
+        if (Array.isArray(q.options) && q.options.length) {
+          const subquestions = document.createElement('div');
+          subquestions.className = 'essay-subquestions';
+          q.options.forEach(option => {
+            const row = document.createElement('div');
+            row.className = 'essay-subquestion';
+            const label = document.createElement('strong');
+            label.textContent = `${option.label || ''})`;
+            const content = document.createElement('div');
+            content.innerHTML = option.content || '';
+            row.append(label, content);
+            subquestions.appendChild(row);
+          });
+          div.prepend(subquestions);
+          normalizeInlineEquationImages(subquestions);
+        }
+        div.querySelector('.essay-answer-editor').value = currentAns.text_answer || '';
         optContainer.appendChild(div);
       }
 
-      // Render KaTeX nếu có công thức toán học
-      renderKaTeX();
+      // Render công thức LaTeX bằng MathJax SVG
+      renderMathJax([contentEl, optContainer]);
 
       // Cập nhật trạng thái các nút Trước / Sau
       document.getElementById('btnPrev').disabled = (currentIndex === 0);
@@ -443,28 +700,64 @@
       updateMatrixStats();
     }
 
-    function renderKaTeX() {
-      if (window.renderMathInElement) {
-        renderMathInElement(document.getElementById('qContent'), {
-          delimiters: [
-            {left: '$$', right: '$$', display: true},
-            {left: '$', right: '$', display: false}
-          ],
-          throwOnError: false
-        });
-        renderMathInElement(document.getElementById('qOptionsContainer'), {
-          delimiters: [
-            {left: '$$', right: '$$', display: true},
-            {left: '$', right: '$', display: false}
-          ],
-          throwOnError: false
-        });
+    function clearMathJax(elements) {
+      if (window.MathJax && typeof window.MathJax.typesetClear === 'function') {
+        window.MathJax.typesetClear(elements);
       }
+    }
+
+    function renderMathJax(elements) {
+      const mathJax = window.MathJax;
+      if (!mathJax || !mathJax.startup || !mathJax.startup.promise) return;
+
+      elements.filter(Boolean).forEach(normalizeInlineMathDelimiters);
+      mathJax.startup.promise
+        .then(() => mathJax.typesetPromise(elements.filter(Boolean)))
+        .catch(error => console.warn('MathJax render warning:', error));
+    }
+
+    function normalizeInlineMathDelimiters(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+      textNodes.forEach(node => {
+        const text = node.nodeValue;
+        node.nodeValue = text.replace(/\$\$([\s\S]+?)\$\$/g, (formula, latex, offset) => {
+          const before = text.slice(0, offset);
+          const after = text.slice(offset + formula.length);
+          return before.trim() || after.trim() ? `$${latex}$` : formula;
+        });
+      });
+    }
+
+    function normalizeInlineEquationImages(root) {
+      root.querySelectorAll('img.exam-img').forEach(image => {
+        const formatAsInline = () => {
+          if (!image.naturalHeight || image.naturalHeight > 72 || image.naturalWidth > 500) return;
+          image.classList.remove('exam-img');
+          image.classList.add('inline-math-img');
+          const wrapper = image.closest('.exam-img-box');
+          if (wrapper && wrapper.children.length === 1) wrapper.replaceWith(image);
+        };
+
+        if (image.complete) formatAsInline();
+        else image.addEventListener('load', formatAsInline, { once: true });
+      });
     }
 
     function jumpToQuestion(index) {
       if (index >= 0 && index < questionsList.length) {
+        const nextQuestion = questionsList[index];
+        if (
+          activeMatrixSection !== 'all' &&
+          String(nextQuestion.section_id) !== activeMatrixSection
+        ) {
+          activeMatrixSection = String(nextQuestion.section_id);
+          renderMatrixSections();
+        }
         currentIndex = index;
+        persistLocalExamSession();
         renderCurrentQuestion();
       }
     }
@@ -480,10 +773,8 @@
         text_answer: null,
         tf_answers: null
       };
+      queueAnswerSync(questionId, optionId, null, null);
       renderCurrentQuestion();
-
-      // Tự động lưu ngầm lên server
-      await autoSaveAnswer(questionId, optionId, null, null);
     }
 
     // Chọn Đúng/Sai g2
@@ -496,42 +787,89 @@
       }
 
       studentAnswers[questionId].tf_answers[String(optionId)] = value;
+      queueAnswerSync(
+        questionId,
+        null,
+        null,
+        studentAnswers[questionId].tf_answers
+      );
       renderCurrentQuestion();
-
-      await autoSaveAnswer(questionId, null, null, studentAnswers[questionId].tf_answers);
     }
 
     // Nhập câu trả lời ngắn g3 / g4
-    let inputTimeout = null;
     function handleShortAnswerInput(questionId, value) {
       if (!studentAnswers[questionId]) {
         studentAnswers[questionId] = { selected_option_id: null, text_answer: value, tf_answers: null };
       } else {
         studentAnswers[questionId].text_answer = value;
       }
+      queueAnswerSync(questionId, null, value, null, true);
+      persistLocalExamSession();
       updateMatrixStats();
-
-      clearTimeout(inputTimeout);
-      inputTimeout = setTimeout(() => {
-        autoSaveAnswer(questionId, null, value, null);
-      }, 500);
     }
 
-    async function autoSaveAnswer(questionId, selectedOptionId, textAnswer, tfAnswers) {
-      try {
-        await fetch(`/api/student/submissions/${submissionId}/save-answer`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question_id: questionId,
-            selected_option_id: selectedOptionId,
-            text_answer: textAnswer,
-            tf_answers: tfAnswers
-          })
-        });
-      } catch (err) {
-        console.warn('Lỗi lưu ngầm câu trả lời:', err);
+    function queueAnswerSync(questionId, selectedOptionId, textAnswer, tfAnswers, debounce = false) {
+      pendingAnswerSync[String(questionId)] = {
+        question_id: questionId,
+        selected_option_id: selectedOptionId,
+        text_answer: textAnswer,
+        tf_answers: tfAnswers,
+        saved_at: Date.now()
+      };
+      persistLocalExamSession();
+      if (navigator.onLine && debounce) {
+        updateConnectionStatus('syncing');
+        clearTimeout(answerSyncTimeout);
+        answerSyncTimeout = setTimeout(flushPendingAnswers, 400);
+      } else if (navigator.onLine) {
+        flushPendingAnswers();
       }
+      else updateConnectionStatus('offline');
+    }
+
+    async function flushPendingAnswers() {
+      if (!navigator.onLine || !submissionId) return;
+      clearTimeout(answerSyncTimeout);
+      if (answerSyncPromise) {
+        await answerSyncPromise;
+        if (navigator.onLine && Object.keys(pendingAnswerSync).length) {
+          await flushPendingAnswers();
+        }
+        return;
+      }
+
+      answerSyncPromise = (async () => {
+        try {
+          while (navigator.onLine && Object.keys(pendingAnswerSync).length) {
+            for (const [questionId, answer] of Object.entries(pendingAnswerSync)) {
+              const response = await fetch(
+                `/api/student/submissions/${submissionId}/save-answer`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(answer)
+                }
+              );
+              const result = await response.json();
+              if (!response.ok || result.status !== 'success') {
+                throw new Error(result.detail || result.message || 'Không thể đồng bộ câu trả lời.');
+              }
+
+              if (pendingAnswerSync[questionId]?.saved_at === answer.saved_at) {
+                delete pendingAnswerSync[questionId];
+              }
+              persistLocalExamSession();
+            }
+          }
+
+          if (localSessionAvailable) updateConnectionStatus('online');
+        } catch (error) {
+          console.warn('Chưa thể đồng bộ câu trả lời; sẽ thử lại khi có mạng:', error);
+          updateConnectionStatus(navigator.onLine ? 'syncing' : 'offline');
+        }
+      })();
+      await answerSyncPromise;
+      answerSyncPromise = null;
     }
 
     // Xử lý nộp bài
@@ -544,7 +882,7 @@
 
       let msg = `<p>Bạn đã hoàn thành <strong>${answeredCount}/${questionsList.length}</strong> câu hỏi.</p>`;
       if (unanswered > 0) {
-        msg += `<p style="margin-top: 10px; color: #f87171;"><i class="fa-solid fa-triangle-exclamation"></i> <strong>Lưu ý:</strong> Bạn vẫn còn <strong>${unanswered}</strong> câu chưa trả lời. Bạn có muốn nộp bài luôn không?</p>`;
+        msg += `<p style="margin-top: 10px; color: #cbd5e1;"><i class="fa-solid fa-triangle-exclamation"></i> <strong>Lưu ý:</strong> Bạn vẫn còn <strong>${unanswered}</strong> câu chưa trả lời. Bạn có muốn nộp bài luôn không?</p>`;
       } else {
         msg += `<p style="margin-top: 10px; color: #34d399;"><i class="fa-solid fa-circle-check"></i> Bạn đã trả lời tất cả các câu hỏi!</p>`;
       }
@@ -557,24 +895,91 @@
       document.getElementById('confirmSubmitModal').classList.remove('active');
     }
 
+    function renderDriveUploadStatus(data) {
+      const driveStatus = document.getElementById('resultDriveStatus');
+      driveStatus.replaceChildren();
+
+      if (data.status === 'uploaded') {
+        driveStatus.textContent = 'Đã tạo PDF và gửi lên Google Drive. ';
+        const driveLink = document.createElement('a');
+        driveLink.href = data.file.web_view_link;
+        driveLink.target = '_blank';
+        driveLink.rel = 'noopener noreferrer';
+        driveLink.textContent = 'Mở file';
+        driveStatus.appendChild(driveLink);
+        driveStatus.style.color = 'var(--success, #10b981)';
+      } else if (data.status === 'failed') {
+        driveStatus.textContent = `Bài thi đã nộp nhưng chưa gửi được PDF lên Google Drive: ${data.detail}`;
+        driveStatus.style.color = 'var(--warning, #f59e0b)';
+      } else if (data.status === 'pending' || data.status === 'uploading') {
+        driveStatus.textContent = 'Bài đã nộp thành công. PDF đang được gửi lên Google Drive...';
+        driveStatus.style.color = 'var(--text-muted)';
+      } else if (data.status === 'already_submitted') {
+        driveStatus.textContent = data.message;
+        driveStatus.style.color = 'var(--text-muted)';
+      } else {
+        driveStatus.textContent = '';
+      }
+    }
+
+    async function monitorDriveUploadStatus() {
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+          const res = await fetch(`/api/student/submissions/${submissionId}/drive-status`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || 'Không thể kiểm tra trạng thái gửi PDF.');
+
+          renderDriveUploadStatus(data);
+          if (data.status !== 'pending' && data.status !== 'uploading') return;
+        } catch (err) {
+          const driveStatus = document.getElementById('resultDriveStatus');
+          driveStatus.textContent = 'Bài đã nộp thành công. Chưa thể cập nhật trạng thái Google Drive do mất kết nối; hệ thống vẫn tiếp tục xử lý.';
+          driveStatus.style.color = 'var(--text-muted)';
+        }
+      }
+    }
+
     async function finalizeSubmitExam() {
-      closeSubmitModal();
-      clearInterval(timerInterval);
+      if (!navigator.onLine) {
+        alert('Đang mất kết nối mạng. Câu trả lời đã được lưu trên thiết bị; hãy kết nối lại để nộp bài.');
+        return;
+      }
+      if (isSubmitting) return;
+      isSubmitting = true;
+      const submitButton = document.querySelector('#confirmSubmitModal .btn-success');
+      if (submitButton) submitButton.disabled = true;
 
       try {
+        clearTimeout(answerSyncTimeout);
+        await flushPendingAnswers();
+        if (Object.keys(pendingAnswerSync).length) {
+          throw new Error('Còn câu trả lời chưa đồng bộ. Vui lòng kiểm tra kết nối rồi thử nộp lại.');
+        }
         const res = await fetch(`/api/student/submissions/${submissionId}/submit`, {
           method: 'POST'
         });
         const data = await res.json();
         if (!res.ok) {
-          alert('Lỗi khi nộp bài: ' + (data.detail || 'Không xác định'));
-          return;
+          throw new Error(data.detail || 'Không xác định');
         }
 
+        closeSubmitModal();
+        clearInterval(timerInterval);
+        clearLocalExamSession();
         document.getElementById('resultScore').textContent = `${data.score} đ`;
-        document.getElementById('resultStats').innerHTML = `Số câu đạt chuẩn: <strong>${data.correct_questions} / ${data.total_questions}</strong> câu`;
+        document.getElementById('resultStats').innerHTML = `Số câu đạt chuẩn: <strong>${data.correct_questions ?? 0} / ${data.total_questions ?? questionsList.length}</strong> câu`;
+        renderDriveUploadStatus(data.drive_upload || {
+          status: data.status,
+          message: data.message
+        });
         document.getElementById('resultModal').classList.add('active');
+        if (data.drive_upload?.status === 'pending' || data.drive_upload?.status === 'uploading') {
+          monitorDriveUploadStatus();
+        }
       } catch (err) {
+        isSubmitting = false;
+        if (submitButton) submitButton.disabled = false;
         alert('Lỗi nộp bài: ' + err.message);
       }
     }

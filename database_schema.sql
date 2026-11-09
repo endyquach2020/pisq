@@ -74,6 +74,11 @@ CREATE TABLE `exam_submissions` (
   `submitted_at` datetime DEFAULT NULL COMMENT 'Thời điểm nộp bài',
   `score` decimal(4,2) DEFAULT NULL COMMENT 'Tổng điểm đạt được',
   `status` enum('in_progress','submitted','graded','timed_out') NOT NULL DEFAULT 'in_progress',
+  `drive_upload_status` varchar(20) DEFAULT NULL,
+  `drive_upload_detail` text DEFAULT NULL,
+  `drive_file_id` varchar(255) DEFAULT NULL,
+  `drive_file_url` text DEFAULT NULL,
+  `drive_upload_attempts` int(10) unsigned NOT NULL DEFAULT 0,
   `shuffled_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'Lưu cấu trúc đề đã trộn riêng cho học sinh này (thứ tự câu/phương án)' CHECK (json_valid(`shuffled_data`)),
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -96,6 +101,7 @@ CREATE TABLE `exams` (
   `title` varchar(255) NOT NULL COMMENT 'Tên/Tiêu đề bài kiểm tra',
   `description` text DEFAULT NULL COMMENT 'Mô tả hoặc hướng dẫn đề thi',
   `creator_id` int(10) unsigned NOT NULL COMMENT 'Giáo viên/Admin tạo bài thi',
+  `class_id` int(10) unsigned DEFAULT NULL COMMENT 'Lớp được phép làm bài thi',
   `total_score` decimal(4,2) NOT NULL DEFAULT 10.00 COMMENT 'Thang điểm tối đa (thường là 10.0)',
   `duration_minutes` int(10) unsigned NOT NULL COMMENT 'Thời gian làm bài tính bằng phút',
   `start_time` datetime DEFAULT NULL COMMENT 'Thời gian mở đề thi',
@@ -107,8 +113,10 @@ CREATE TABLE `exams` (
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `fk_exams_creator` (`creator_id`),
+  KEY `idx_exams_class` (`class_id`),
   KEY `idx_exams_time` (`start_time`,`end_time`),
-  CONSTRAINT `fk_exams_creator` FOREIGN KEY (`creator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  CONSTRAINT `fk_exams_creator` FOREIGN KEY (`creator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_exams_class` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Quản lý thông tin đề thi và cấu hình phòng thi';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
